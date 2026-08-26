@@ -1,0 +1,4 @@
+# .claude/workflows/CHECKSUMS - Schutzpfad-Anker (Auflage A2, Paket W13, O-0123/O-0124)
+# Jede Aenderung an einer gelisteten Datei braucht Captain-Freigabe und einen
+# erneuerten Anker hier; geprueft von bin/fm-gauntlet-anker.sh.
+d48a8580bc1a0986c6adbfcaa6b7d2b41d413445966610811e71ff672bb73b18  paket-gauntlet.js

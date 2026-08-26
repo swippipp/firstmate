@@ -13,6 +13,10 @@
 # The default (no explicit-path) path also runs bin/fm-lint-workflows.sh so a
 # malformed GitHub workflow, including a self-broken ci.yml, fails locally
 # before merge instead of only failing to run as CI.
+# The default (no explicit-path) path also runs bin/fm-gauntlet-anker.sh, which
+# verifies the SHA-256 anchors of the protected .claude/workflows/ templates
+# against their CHECKSUMS file (Auflage A2). It runs after the workflow YAML
+# check and before the rule-database gate.
 # The default (no explicit-path) path also runs bin/fm-regel-eval.sh check
 # last, after ShellCheck and the workflow check, so every change to AGENTS.md
 # and regeln/ meets the same one owner CI and the no-mistakes pre-push gate
@@ -126,6 +130,20 @@ fm_lint_usage() {
 fm_lint_run_workflows() {
   [ "$EXPLICIT_PATHS" -eq 0 ] || return 0
   "$SELF_DIR/fm-lint-workflows.sh"
+}
+
+# Default no-args lint also verifies the protected-path checksum anchors under
+# .claude/workflows/ (Auflage A2). The anchor check owns its own script next to
+# fm-lint-workflows.sh; a missing checker prints one loud skip line instead of
+# failing, mirroring the regel-eval bare-environment behavior below.
+fm_lint_run_gauntlet_anker() {
+  [ "$EXPLICIT_PATHS" -eq 0 ] || return 0
+  local anker="$SELF_DIR/fm-gauntlet-anker.sh"
+  if [ ! -x "$anker" ]; then
+    printf 'fm-lint.sh: bin/fm-gauntlet-anker.sh missing or not executable - gauntlet anchor gate SKIPPED (Ausweg: restore bin/fm-gauntlet-anker.sh)\n' >&2
+    return 0
+  fi
+  "$anker" --root "$ROOT"
 }
 
 # Runs last, after ShellCheck and the workflow check, so every home, CI, and
@@ -304,6 +322,11 @@ if [ "$CHANGED_MODE" -eq 1 ] && [ "$ROOT_COUNT" -eq 0 ]; then
   printf 'fm-lint.sh: no changed lint targets\n'
   overall_rc=0
   fm_lint_run_workflows || overall_rc=$?
+  if [ "$overall_rc" -eq 0 ]; then
+    fm_lint_run_gauntlet_anker || overall_rc=$?
+  else
+    fm_lint_run_gauntlet_anker || true
+  fi
   if [ "$overall_rc" -eq 0 ]; then
     fm_lint_run_regel_eval || overall_rc=$?
   else
@@ -614,6 +637,12 @@ if [ "$overall_rc" -eq 0 ]; then
   fm_lint_run_workflows || overall_rc=$?
 else
   fm_lint_run_workflows || true
+fi
+
+if [ "$overall_rc" -eq 0 ]; then
+  fm_lint_run_gauntlet_anker || overall_rc=$?
+else
+  fm_lint_run_gauntlet_anker || true
 fi
 
 if [ "$overall_rc" -eq 0 ]; then
