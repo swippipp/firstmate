@@ -56,7 +56,10 @@ FM_KONTEN_LIB_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$FM_KONTEN_LIB_DIR/.." && pwd)}"
 # shared seat (captain 26.08., O-0112): the firstmate AND secondmate spawns run
 # on it; workers still resolve to offiziere-worker. At most ONE row may carry a
 # firstmate* role - fm_firstmate_sitz aborts loud on two seats.
-FM_KONTEN_ROLLEN="firstmate firstmate-offiziere offiziere-worker restverbrauch captain-handbetrieb"
+# gesperrt (O-0125): Anthropic-Konto gekuendigt - nie Spawn-Ziel, nie verteilbar;
+# der STORE bleibt als Traeger der Fremdprovider-Route (claude-zai pinnt den
+# claude1-Wrapper, dessen Rueckaufloesung diese Zeile weiter braucht).
+FM_KONTEN_ROLLEN="firstmate firstmate-offiziere offiziere-worker restverbrauch captain-handbetrieb gesperrt"
 
 fm_konten_warn() { printf 'fm-konten: %s\n' "$*" >&2; }
 
