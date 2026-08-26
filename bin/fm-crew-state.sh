@@ -70,7 +70,10 @@
 #   4. No run for this crew (pre-validation, or kind=scout): first the
 #      process-evidence liveness read (fm_backend_agent_state) - an endpoint
 #      that is open but confidently agent-free reports unknown · agent-gone
-#      instead of trusting a stale busy record (the empty-shell shape) - then
+#      with wording that separates process death from window loss (L104,
+#      26.08.: "dead" and "missing" used to report word-identically, so the
+#      supervisor could not tell an empty shell from a missing window;
+#      state/source tokens stay identical, so no token reader breaks) - then
 #      the recorded backend's pane busy state, then the status log's last line only
 #      when its verb maps to a recognized run-state. Decision-only events such as
 #      `resolved` never become current state or detail. For harness=claude, a
@@ -217,8 +220,13 @@ if [ -n "$REMOTE_HOST" ]; then
       fi
       emit unknown remote-endpoint "alive on $REMOTE_HOST (an idle secondmate is healthy)"
       ;;
-    dead|missing)
-      emit unknown remote-endpoint "remote endpoint $REMOTE_STATE on $REMOTE_HOST"
+    dead)
+      # L104 (26.08.): distinct wording - the process died on a window that is
+      # still there (empty shell) versus the window itself being gone.
+      emit unknown remote-endpoint "process dead, window present there: remote endpoint $REMOTE_STATE on $REMOTE_HOST"
+      ;;
+    missing)
+      emit unknown remote-endpoint "window/endpoint missing there: remote endpoint $REMOTE_STATE on $REMOTE_HOST"
       ;;
     '')
       emit unknown remote-endpoint "unknown-remote: $REMOTE_HOST unreachable or endpoint unreadable (not proof of death)"
@@ -869,9 +877,20 @@ if [ "$KIND" != secondmate ]; then
   # and trusting it would report a dead crew as working. Only a confident
   # negative overrides; ambiguous, unreadable, and unverified reads fall
   # through to the semantic verdict unchanged.
+  # L104 (26.08., Ox-Tod): dead und missing melden hier seit jeher WORTGLEICH,
+  # so dass die Aufsicht Prozess-Tod nicht von Fenster-Verlust unterscheiden
+  # konnte. The recovery-grade verdict therefore travels verbatim, as two
+  # clearly different sentences over the same state/source tokens:
+  #   dead    - process dead while the window is still present (empty shell)
+  #   missing - the recorded window/endpoint itself is gone
   case "$(fm_backend_agent_state "$TASK_BACKEND" "$BACKEND_TARGET")" in
-    dead|missing)
-      emit unknown agent-gone "endpoint open but its process family holds no live agent (empty shell) - inspect or recover"
+    dead)
+      emit unknown agent-gone \
+        "process dead, window present: endpoint open but its process family holds no live agent (empty shell) - inspect or recover"
+      ;;
+    missing)
+      emit unknown agent-gone \
+        "window/endpoint missing: nothing lives at the recorded target any more - reconcile or relaunch"
       ;;
   esac
   BUSY_VERDICT=$(crew_busy_verdict "$BACKEND_TARGET")

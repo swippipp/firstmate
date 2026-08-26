@@ -1821,6 +1821,24 @@ test_remote_dead_reports_remote_verdict() {
   pass "fm-crew-state remote: the remote host's own dead verdict is reported truthfully"
 }
 
+# L104's second half on the remote arm: the same two verdicts must keep their
+# distinct sentences over the wire as well - process death with the window
+# still there is an empty shell, a missing verdict is a lost endpoint.
+test_remote_missing_reports_missing_wording() {
+  reset_fakes
+  local d out rc
+  d=$(setup_remote_case remote-missing)
+  make_fakebin "$d" >/dev/null
+  out=$(FM_FAKE_REMOTE_STATE_OUT=missing FM_FAKE_SSH_RC=0 run_remote_crew_state "$d" rsm); rc=$?
+  expect_code 0 "$rc" "remote missing exits 0"
+  assert_contains "$out" "window/endpoint missing there:" \
+    "a missing remote endpoint names the lost window/endpoint"
+  assert_contains "$out" "remote endpoint missing on remote-mac" \
+    "the missing sentence still carries the recovery-grade verdict and host"
+  assert_not_contains "$out" "process dead" "the missing case never claims the window is present"
+  pass "fm-crew-state remote: a missing endpoint reports the missing wording, not process death"
+}
+
 test_missing_meta() {
   reset_fakes
   local d; d=$(new_case nometa)
@@ -2385,6 +2403,44 @@ test_agent_free_endpoint_reports_agent_gone() {
   pass "an open endpoint whose process family holds no agent reports agent-gone, not a stale busy verdict"
 }
 
+# L104 (26.08., Ox-Tod): dead ("process dead, window present") and missing
+# ("window/endpoint missing") used to report word-identically, so supervision
+# could not tell an empty shell from a lost window. Both sentences below name
+# their shape, over identical state/source tokens so token readers stay put.
+test_dead_window_wording_names_process_death() {
+  reset_fakes
+  local d; d=$(new_case dead-window-wording)
+  make_repo_on_branch "$d/wt" fm/feat-deadword
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-deadword.meta" "window=fm:fm-feat-deadword" \
+    "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'working: implementing\n' > "$d/state/feat-deadword.status"
+  # Window present in the inventory, foreground command a bare shell: dead.
+  export FM_FAKE_TMUX_LIST=fm-feat-deadword FM_FAKE_TMUX_CURRENT_COMMAND=bash
+  local out; out=$(run_crew_state "$d" feat-deadword)
+  unset FM_FAKE_TMUX_LIST FM_FAKE_TMUX_CURRENT_COMMAND
+  assert_contains "$out" "process dead, window present" "the dead sentence names process death with the window still there"
+  assert_not_contains "$out" "window/endpoint missing" "the dead case never reads as a missing window"
+  pass "a dead agent on a live window reports 'process dead, window present'"
+}
+
+test_missing_window_wording_names_the_missing_endpoint() {
+  reset_fakes
+  local d; d=$(new_case missing-window-wording)
+  make_repo_on_branch "$d/wt" fm/feat-missingword
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-missingword.meta" "window=fm:fm-feat-missingword" \
+    "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'working: implementing\n' > "$d/state/feat-missingword.status"
+  # A successful inventory that OMITS the recorded window is authoritative.
+  export FM_FAKE_TMUX_LIST="some-other-window"
+  local out; out=$(run_crew_state "$d" feat-missingword)
+  unset FM_FAKE_TMUX_LIST
+  assert_contains "$out" "window/endpoint missing" "the missing sentence names the lost window"
+  assert_not_contains "$out" "process dead, window present" "the missing case never claims the window is present"
+  pass "an authoritatively absent window reports 'window/endpoint missing'"
+}
+
 test_active_wait_field_outranks_run_and_pane() {
   reset_fakes
   local d now; d=$(new_case wait-field)
@@ -2438,6 +2494,9 @@ test_ci_green_override_is_not_probed_for_supersession
 test_terminal_supersession_probe_is_damped_but_never_caches_a_positive
 test_unanswered_runs_listing_is_never_cached_as_absent
 test_agent_free_endpoint_reports_agent_gone
+test_dead_window_wording_names_process_death
+test_missing_window_wording_names_the_missing_endpoint
+test_remote_missing_reports_missing_wording
 test_active_wait_field_outranks_run_and_pane
 
 echo "all fm-crew-state tests passed"
