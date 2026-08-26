@@ -123,6 +123,53 @@ grep -qF "$(printf "kill\tHR3'\twarn\tcaptain approved cleanup\t")" "$CAPTURE" \
   && ok "fm_tor_log is called with tor=kill regel-id=HR3' verdikt=warn and the reason as ausweg-genutzt" \
   || fail "fm_tor_log must be called with the documented signature and the captain's reason (got: $(cat "$CAPTURE" 2>/dev/null))"
 
+# --- golden rows (Befund 1c, the real catch of 26.08. 10:46) ----------------
+# A kill whose pid arguments are literal non-number tokens - an unexpanded or
+# empty shell variable, here the historic catch text - is NOT a number to
+# evaluate: it stays ROT at this TOR forever. The caller may believe it killed
+# something; the fleet record says it refused, verbatim.
+GOLD_CAPTURE="$TMP/tor-log-golden.tsv"
+cat > "$TMP/gold-stub-tor-log-lib.sh" <<STUBEOF
+fm_tor_log() { printf '%s\t%s\t%s\t%s\t%s\n' "\$1" "\$2" "\$3" "\$4" "\$5" >> "$GOLD_CAPTURE"; }
+STUBEOF
+
+gold_deny() { # <raw command text> -> deny JSON on stdout, rc via GOLD_RC
+  gold_msg="$(FM_HOME="$HOME_A" FM_TOR_LOG_LIB_OVERRIDE="$TMP/gold-stub-tor-log-lib.sh" \
+    "$GUARD" --command "$1" 2>&1)"
+  GOLD_RC=$?
+}
+
+# row 1: the unexpanded-variable probe, byte-for-byte the historic catch text.
+unset ARM   # set -u guard: this suite itself never expands $ARM anywhere below
+# shellcheck disable=SC2016  # intentional: the point of this row IS the unexpanded $ARM at the gate
+gold_deny 'kill $ARM 2>/dev/null'
+[ "$GOLD_RC" -eq 2 ] || fail "the unexpanded-variable kill must deny with exit 2 (got $GOLD_RC)"
+printf '%s' "$gold_msg" | grep -qF "HR3'" || fail "golden denial must cite HR3'"
+# shellcheck disable=SC2016  # the message names the literal command on purpose
+ok 'golden row: kill $ARM 2>/dev/null stays rot (the 10:46 catch class)'
+grep -qF "$(printf "kill\tHR3'\trot\t-\t")" "$GOLD_CAPTURE" \
+  || fail "fm_tor_log must be called with verdikt=rot and ausweg=- (got: $(cat "$GOLD_CAPTURE" 2>/dev/null))"
+# shellcheck disable=SC2016  # fixed-string pattern must stay unexpanded to match the logged raw text
+grep -F '	kill $ARM 2>/dev/null - unowned' "$GOLD_CAPTURE" >/dev/null \
+  || fail "the rot row must record the literal raw args (got: $(cat "$GOLD_CAPTURE" 2>/dev/null))"
+ok 'the rot row records the raw, UNexpanded arguments in its kontext'
+
+# row 2: the double-quoted variant expands nothing for the classifier either.
+# shellcheck disable=SC2016  # intentional: quoted-variant literal
+gold_deny 'kill "$ARM"'
+[ "$GOLD_RC" -eq 2 ] || fail "quoted variant must stay rot (got rc=$GOLD_RC)"
+# shellcheck disable=SC2016  # message names the literal command on purpose
+ok 'golden row: quoted variant kill "$ARM" stays rot too'
+
+# counter-probe so the rows cannot go vacuous: the SAME armed guard with a
+# plain numeric unowned pid also lands exactly one more rot row.
+before=$(wc -l < "$GOLD_CAPTURE")
+gold_deny 'kill 5555'
+[ "$GOLD_RC" -eq 2 ] || fail 'counter-probe: unowned numeric pid must deny'
+[ "$(wc -l < "$GOLD_CAPTURE")" -eq $((before + 1)) ] \
+  && ok "counter-probe: the numeric case logs exactly one more rot row" \
+  || fail "counter-probe failed: expected one new row (got $(wc -l < "$GOLD_CAPTURE") vs $before)"
+
 # --- an ordinary, unrelated command allows ----------------------------------
 if guard --command "echo hello world"; then
   ok "an ordinary command with no kill/pkill/killall allows"

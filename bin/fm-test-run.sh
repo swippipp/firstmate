@@ -73,6 +73,12 @@ set -eu
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# Gate decisions raised inside any suite are fixtures, not fleet history
+# (Befund 1b, 26.08.). One owner exports the suppression marker so even
+# suites that never source tests/lib.sh run clean; a suite verifying the log
+# itself clears the variable around its own assertions.
+export FM_TOR_LOG_UNTERDRUECKEN="${FM_TOR_LOG_UNTERDRUECKEN:-1}"
+
 MODE=
 LIST_ONLY=0
 LIST_FAMILIES=0

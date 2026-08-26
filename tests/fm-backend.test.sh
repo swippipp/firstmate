@@ -33,6 +33,14 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # shellcheck source=tests/fm-konten-fixture-lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/fm-konten-fixture-lib.sh"
+
+# This suite was the named polluter of Befund 1b (26.08.): its spawn-gate
+# preflights judged /tmp fixture projects and their rot/green rows landed in
+# the LIVE state/tor-log, diluting the strike-list statistics. lib.sh already
+# defaults FM_TOR_LOG_UNTERDRUECKEN=1; this suite pins it again on purpose -
+# it is one of the suites the finding holds responsible for the hygiene.
+FM_TOR_LOG_UNTERDRUECKEN=1
+export FM_TOR_LOG_UNTERDRUECKEN
 fm_git_identity fmtest fmtest@example.invalid
 
 # shellcheck source=/dev/null

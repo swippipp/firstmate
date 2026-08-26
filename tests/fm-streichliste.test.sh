@@ -28,9 +28,9 @@ STL="$ROOT/bin/fm-streichliste.sh"
 
 tage_vor() { date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ; }
 
-tor_zeile() { # <ts> <tor> <verdikt> <ausweg>
-  printf '{"ts":"%s","tor":"%s","regel":"-","verdikt":"%s","ausweg":"%s","kontext":"fixture"}\n' \
-    "$1" "$2" "$3" "$4"
+tor_zeile() { # <ts> <tor> <verdikt> <ausweg> [kontext]
+  printf '{"ts":"%s","tor":"%s","regel":"-","verdikt":"%s","ausweg":"%s","kontext":"%s"}\n' \
+    "$1" "$2" "$3" "$4" "${5:-fixture}"
 }
 
 baue_fixture() {
@@ -128,6 +128,21 @@ YAML
     tor_zeile "$(tage_vor 60)" gesund-tor gruen -
     tor_zeile "$(tage_vor 10)" gesund-tor rot -
   } > "$d/state/tor-log/gesund-tor.jsonl"
+
+  # tmp-tor (Filter-Fall): old enough, but its ONLY denial inside the window
+  # comes from a /tmp fixture context - a suite probe, not a refusal at a
+  # point of action. It must read as zero-denial for the strike list.
+  {
+    tor_zeile "$(tage_vor 60)" tmp-tor gruen -
+    tor_zeile "$(tage_vor 10)" tmp-tor rot - "kind=ship harness=claude konto=konto-1 projekt=/tmp/fm-backend-tests.ABC123/proj"
+  } > "$d/state/tor-log/tmp-tor.jsonl"
+
+  # sweep-tor (Filter-Fall): same shape, but the only denial is an inventur
+  # sweep marked sweep=1 (FM_MANDAT_SWEEP=1). Ignored like any other probe.
+  {
+    tor_zeile "$(tage_vor 60)" sweep-tor gruen -
+    tor_zeile "$(tage_vor 10)" sweep-tor rot - "sweep=1 testrepo HEAD~30..HEAD: 35 hit(s), klassen: geld"
+  } > "$d/state/tor-log/sweep-tor.jsonl"
 }
 
 lauf() {
@@ -162,6 +177,14 @@ assert_not_contains "$OUT" "streichkandidat: Tor keinerot-tor - reines Fehlalarm
 # --- 4. a real catch clears the Tor entirely ---------------------------------
 assert_not_contains "$OUT" "Tor gesund-tor" \
   "a Tor with a real, unescaped catch must not appear anywhere in the list"
+
+# --- 9./10. transitional filter (Befund 1b/1d): probes are not refusals ------
+assert_contains "$OUT" "streichkandidat: Tor tmp-tor - keine Verweigerung (rot) in den letzten 45 Tagen" \
+  "a /tmp-context denial is a suite probe and must not count as a real refusal"
+assert_contains "$OUT" "streichkandidat: Tor sweep-tor - keine Verweigerung (rot) in den letzten 45 Tagen" \
+  "a sweep=1-marked inventur row must be ignored by the strike list"
+assert_not_contains "$OUT" "Tor gesund-tor" \
+  "counter-probe: unfiltered rote must still count (the filter cannot go vacuous)"
 
 pass "fm-streichliste.sh judges Tore correctly (young / false-alarm / zero-denial / healthy)"
 

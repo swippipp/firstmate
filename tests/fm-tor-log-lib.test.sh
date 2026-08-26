@@ -13,6 +13,10 @@
 #      outside [a-z0-9-] both warn on stderr; the verdikt is still recorded
 #      verbatim and the file name is sanitized.
 #   5. Concurrent writers interleave no partial lines (flock).
+#   6. Suppression and isolation hygiene: FM_TOR_LOG_UNTERDRUECKEN=1 records
+#      nothing anywhere and stays silent; a mistyped value warns instead of
+#      suppressing; with FM_STATE_OVERRIDE set, the row lands in the
+#      overridden world, not in the named home.
 #
 # Isolation: throwaway FM_HOME; nothing touches the live state/tor-log.
 # shellcheck disable=SC2015 # ok/fail are echo-only, so `A && ok || fail` cannot misfire.
@@ -29,6 +33,13 @@ LOG="$HOME_A/state/tor-log/spawn.jsonl"
 FAILS=0
 fail() { echo "FAIL: $1" >&2; FAILS=$((FAILS + 1)); }
 ok() { echo "ok: $1"; }
+
+# This suite verifies the log writes THEMSELVES, so the fleet-wide test-mode
+# marker (pinned by fm-test-run.sh and tests/lib.sh for every other suite)
+# must be cleared here before any assertion below - sections 4b/4c set and
+# examine it explicitly per subshell.
+FM_TOR_LOG_UNTERDRUECKEN=
+export FM_TOR_LOG_UNTERDRUECKEN
 
 export FM_HOME="$HOME_A"
 # shellcheck source=bin/fm-tor-log-lib.sh
@@ -108,6 +119,46 @@ if fm_tor_log spawn >/dev/null 2>&1; then
 else
   fail "too few arguments must still return 0"
 fi
+
+# --- 4b. suppression marker (Befund 1b: tests never touch live logs) --------
+SUP="$TMP/sup-home"
+mkdir -p "$SUP/state/tor-log"
+FM_TOR_LOG_UNTERDRUECKEN=1 FM_HOME="$SUP" bash -c '
+  . "'"$LIB"'"
+  fm_tor_log spawn O-1000 rot - "suite fixture world"
+'
+[ -f "$SUP/state/tor-log/spawn.jsonl" ] \
+  && fail "the marker must suppress the write entirely" \
+  || ok "FM_TOR_LOG_UNTERDRUECKEN=1 writes nothing, anywhere"
+quiet="$(FM_TOR_LOG_UNTERDRUECKEN=1 FM_HOME="$SUP" bash -c '
+  . "'"$LIB"'"
+  fm_tor_log spawn O-1000 rot - "again"
+' 2>&1)"
+[ -z "$quiet" ] && ok "a suppressed write stays silent (suites must not spam stderr)" \
+  || fail "suppression must be quiet (got: $quiet)"
+badout="$(FM_TOR_LOG_UNTERDRUECKEN=jep FM_HOME="$SUP" bash -c '
+  . "'"$LIB"'"
+  fm_tor_log spawn O-1001 rot - "typo guard"
+' 2>&1)"
+printf '%s' "$badout" | grep -q 'is not 0/1/true/false/ja/nein/yes/no; logging continues' \
+  && ok "an unrecognized marker value warns and does NOT suppress" \
+  || fail "a typo in the marker must never silently blank the log (got: $badout)"
+
+# --- 4c. state-override derivation (Befund 1b: the record follows the world) -
+OVH="$TMP/ov-home"
+mkdir -p "$OVH"
+OVR_STATE="$TMP/ov-state"
+FM_HOME="$OVH" FM_STATE_OVERRIDE="$OVR_STATE" bash -c '
+  FM_TOR_LOG_UNTERDRUECKEN=
+  . "'"$LIB"'"
+  fm_tor_log spawn O-1002 rot - "fixture judged under state override"
+'
+[ -f "$OVR_STATE/tor-log/spawn.jsonl" ] \
+  && ok "with FM_STATE_OVERRIDE the row logs into the overridden world" \
+  || fail "the record must follow the state being judged"
+[ -f "$OVH/state/tor-log/spawn.jsonl" ] \
+  && fail "a state-overridden decision must not touch the home it names" \
+  || ok "no row leaked into $FM_HOME-resolved state while overridden"
 
 # --- 5. concurrent writers --------------------------------------------------
 CLOG="$HOME_A/state/tor-log/rollout.jsonl"

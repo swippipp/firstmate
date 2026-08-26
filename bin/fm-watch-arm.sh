@@ -15,6 +15,13 @@
 # child is reaped when the call returns, leaving NO watcher running and a false
 # "already running" off the dying process. That exact mistake silently took
 # supervision down for ~30 minutes.
+# For short PROBE runs (watching one cycle to inspect its output), do not build
+# `cmd & PID=$!; sleep N; kill $PID` by hand either - across harness calls or
+# guard lanes that pattern kills nothing while LOOKING like it did, and the kill
+# TOR (HR3') refuses any literal non-number pid argument as rot (Befund 1c,
+# 26.08.: the live catch of exactly such a line). Probe cleanly instead:
+#   timeout 20s bin/fm-watch-arm.sh > probe.out.txt 2>&1; tail -3 probe.out.txt
+# which needs no pid capture and no kill at all.
 # On a harness with a PreToolUse-equivalent hook, bin/fm-arm-pretool-check.sh
 # applies the command-position policy before the command runs; see
 # docs/arm-pretool-check.md for the blessed tree and deny reason codes. It is a

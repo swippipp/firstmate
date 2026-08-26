@@ -15,7 +15,11 @@
 #                                    contract: ts, tor, regel, verdikt, ausweg,
 #                                    kontext - "ausweg" is "-" for no escape
 #                                    taken, any other value names the exit the
-#                                    caller actually took)
+#                                    caller actually took). Transitional: lines
+#                                    whose kontext carries /tmp/ (suite/probe
+#                                    fixture world) or sweep=1 (inventur sweep,
+#                                    marked by FM_MANDAT_SWEEP=1) are ignored -
+#                                    they are not refusals at a point of action.
 #   $FM_ROOT/regeln/*.yaml           the rule source; `status:` and `verfall:`
 #                                    are read as ingest last wrote them
 #   $FM_ROOT/tests/regel-retrieval-golden.tsv   golden retrieval rows
@@ -128,6 +132,18 @@ for pfad in sorted(glob.glob(os.path.join(tor_log_dir, "*.jsonl"))):
                     continue
                 datum = parse_ts(obj.get("ts", ""))
                 if datum is None:
+                    continue
+                kontext = str(obj.get("kontext", ""))
+                # Uebergangsweiser Filter (Befund 1b/1d, 26.08.): Zeilen aus
+                # /tmp-Fixture-Kontexten sind Suite-Proben, keine Verweigerungen
+                # am Handlungsort, und als sweep=1 markierte Zeilen sind
+                # Inventur-Sweeps - beide verwässern die Fang/Fehlalarm-
+                # Statistik, auf der die Kandidatenklassen rechnen. Der echte Fix
+                # liegt an der Quelle (FM_TOR_LOG_UNTERDRUECKEN / die liberale
+                # FM_STATE_OVERRIDE-Ableitung in fm-tor-log-lib.sh); dieser
+                # Filter bleibt nur so lange, bis alle Schreiber den Marker
+                # tragen.
+                if "/tmp/" in kontext or "sweep=1" in kontext:
                     continue
                 zeilen.append((datum, obj.get("verdikt", ""), obj.get("ausweg", "-")))
     except OSError:

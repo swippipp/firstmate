@@ -34,6 +34,14 @@ FM_TEST_LIB_SOURCED=1
 # strips this to verify real refusal.
 export FM_GATE_REFUSE_BYPASS=1
 
+# Gate decisions raised inside a suite are test fixtures, not fleet history
+# (Befund 1b, 26.08.): by default every suite suppresses its tor-log writes so
+# live state/tor-log statistics stay real. The default is exported, not merely
+# set, because gates run in child scripts that must inherit it. Suites that
+# verify the log itself (fm-tor-log-lib.test.sh) clear or flip this around
+# their own assertions; FM_STATE_OVERRIDE-scoped suites stay clean either way.
+export FM_TOR_LOG_UNTERDRUECKEN="${FM_TOR_LOG_UNTERDRUECKEN:-1}"
+
 # Resolve the repo root from this library's own location. Consumed by sourcing
 # test files, not by this library, so it reads as "unused" here.
 # shellcheck disable=SC2034

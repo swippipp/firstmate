@@ -107,6 +107,22 @@ fi
 usage() { sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "error: $*" >&2; exit 2; }
 
+# Sweep marking (Befund 1d): an inventory that judges whole histories across
+# many repos (e.g. HEAD~30..HEAD scans on morning re-entry) is not a refusal at
+# the point of action - its rows would flood the strike list with
+# hit-profil-rot lines that no actor is standing behind. An inventorier (a
+# scripted sweep or an ad-hoc forensics loop) marks itself with
+# FM_MANDAT_SWEEP=1; every decision row then carries "sweep=1" as the first
+# kontext token and fm-streichliste.sh ignores those rows. Gate semantics are
+# unchanged: the refusal still refuses; only the statistics stay clean.
+fm_mandat_kontext() { # <kontext...> -> optionally sweep-marked kontext
+  if [ "${FM_MANDAT_SWEEP:-}" = 1 ]; then
+    printf 'sweep=1 %s' "$*"
+  else
+    printf '%s' "$*"
+  fi
+}
+
 is_known_klasse() {
   case "$KNOWN_KLASSEN" in
     *" $1 "*) return 0 ;;
@@ -240,7 +256,7 @@ case "$cmd" in
       echo "  source: AGENTS.md HR1 (untouchable) - \"the firstmate never writes into projects\"." >&2
       echo "  Ausweg: land the class '$klasse' / pattern '$muster' via $repo's own delivery path (a PR that edits its MANDAT.md), citing: $grund" >&2
       echo "  Nothing was written; no Rücklauf-Markerdatei was created." >&2
-      fm_tor_log "$TOR_NAME" mandat-erweitern-refused warn - "$repo klasse=$klasse muster=$muster: active mandate is project-owned"
+      fm_tor_log "$TOR_NAME" mandat-erweitern-refused warn - "$(fm_mandat_kontext "$repo klasse=$klasse muster=$muster: active mandate is project-owned")"
       exit 2
     fi
 
@@ -263,7 +279,7 @@ case "$cmd" in
       printf 'frist: %s\n' "$frist"
     } > "$marker"
 
-    fm_tor_log "$TOR_NAME" mandat-erweitern warn erweitern "$repo klasse=$klasse muster=$muster"
+    fm_tor_log "$TOR_NAME" mandat-erweitern warn erweitern "$(fm_mandat_kontext "$repo klasse=$klasse muster=$muster")"
     echo "extended $fallback_file: $klasse += $muster"
     echo "Rücklauf-Marker: $marker (Frist $frist)"
     exit 0
@@ -283,7 +299,7 @@ case "$cmd" in
     done
 
     if [ ! -f "$FLAG" ]; then
-      fm_tor_log "$TOR_NAME" mandat-scharf-off gruen - "$repo $branch_or_range: TOR unarmed, silent passage"
+      fm_tor_log "$TOR_NAME" mandat-scharf-off gruen - "$(fm_mandat_kontext "$repo $branch_or_range: TOR unarmed, silent passage")"
       exit 0
     fi
 
@@ -305,7 +321,7 @@ case "$cmd" in
       echo "  Ausweg: land a MANDAT.md into the project via its delivery path, or run:" >&2
       echo "    fm-mandat-check.sh erweitern $repo --klasse <klasse> --muster '<glob>' --grund '<text>'" >&2
       echo "  which creates + extends the fallback file immediately (no project write, so HR1 does not apply here)." >&2
-      fm_tor_log "$TOR_NAME" mandat-fehlt rot - "$repo $branch_or_range: neither $project_file nor $fallback_file exists"
+      fm_tor_log "$TOR_NAME" mandat-fehlt rot - "$(fm_mandat_kontext "$repo $branch_or_range: neither $project_file nor $fallback_file exists")"
       exit 3
     fi
 
@@ -345,11 +361,11 @@ case "$cmd" in
       echo "  Ausweg: get the captain's explicit word for this change, or broaden the boundary yourself via:" >&2
       echo "    fm-mandat-check.sh erweitern $repo --klasse <klasse> --muster '<glob>' --grund '<text>'" >&2
       echo "  (effective immediately; opens a 14-day Rücklauf-Marker for board review)." >&2
-      fm_tor_log "$TOR_NAME" mandat-treffer rot - "$repo $branch_or_range: $hits hit(s), klassen:$struck_klassen"
+      fm_tor_log "$TOR_NAME" mandat-treffer rot - "$(fm_mandat_kontext "$repo $branch_or_range: $hits hit(s), klassen:$struck_klassen")"
       exit 3
     fi
 
-    fm_tor_log "$TOR_NAME" mandat-frei gruen - "$repo $branch_or_range: frei"
+    fm_tor_log "$TOR_NAME" mandat-frei gruen - "$(fm_mandat_kontext "$repo $branch_or_range: frei")"
     exit 0
     ;;
 esac

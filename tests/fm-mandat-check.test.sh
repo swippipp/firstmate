@@ -188,6 +188,35 @@ printf '%s\n' "$bad_out" | grep -qi "unknown Captain-Klasse" || fail "the abort 
 ok "an unknown class name in a mandate file aborts loudly instead of a silent fallback"
 rm -f "$FLAG"
 
+# --- 8. sweep marking: an inventour run is marked in its kontext rows --------
+# Befund 1d: HEAD-range sweeps across repos are refusals-without-actor; they
+# must carry "sweep=1" as their first kontext token so fm-streichliste.sh can
+# ignore them. Gate semantics are unchanged - exit code and stdout identical.
+printf 'armed\n' > "$FLAG"
+LOG="$HOME_A/state/tor-log/mandat.jsonl"
+rows_now=0
+[ -f "$LOG" ] && rows_now=$(wc -l < "$LOG")
+
+FM_TOR_LOG_UNTERDRUECKEN="" FM_HOME="$HOME_A" "$SCRIPT" testrepo feature-hit >/dev/null 2>&1 || true
+unswept=$(tail -n +$((rows_now + 1)) "$LOG" | grep '"mandat-treffer"' | grep -c '"kontext":"testrepo' || true)
+[ "$unswept" -ge 1 ] \
+  || fail "counter-probe: without the marker the treffer row must keep its plain kontext (rows now: $rows_now)"
+
+FM_MANDAT_SWEEP=1 FM_TOR_LOG_UNTERDRUECKEN="" FM_HOME="$HOME_A" "$SCRIPT" testrepo feature-hit >/dev/null 2>&1 || true
+swept=$(tail -n +$((rows_now + 1)) "$LOG" | grep -c '"kontext":"sweep=1 testrepo' || true)
+[ "$swept" -ge 1 ] \
+  || fail "a sweep run must prefix every decision row's kontext with sweep=1"
+
+out_sweep_rc=0
+out_sweep=$(FM_MANDAT_SWEEP=1 FM_HOME="$HOME_A" "$SCRIPT" testrepo feature-hit 2>/dev/null) || out_sweep_rc=$?
+[ "$out_sweep_rc" -eq 3 ] || fail "the sweep marker must NOT soften gate semantics (exit $out_sweep_rc)"
+for klasse in geld nutzerdaten sicherheit oeffentlich vision destruktiv; do
+  printf '%s\n' "$out_sweep" | grep -q "^$klasse	" \
+    || fail "with sweep marking, the hit row for class '$klasse' must still print"
+done
+ok "FM_MANDAT_SWEEP=1 marks every decision row sweep=1 while gate verdicts stay byte-identical"
+rm -f "$FLAG"
+
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failure(s)" >&2
   exit 1

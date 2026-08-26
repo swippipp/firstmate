@@ -29,6 +29,13 @@ FAILS=0
 fail() { echo "FAIL: $1" >&2; FAILS=$((FAILS + 1)); }
 ok() { echo "ok: $1"; }
 
+# These two suites ASSERT real tor-log rows under their fixture home, so the
+# fleet-wide test-mode marker (pinned by fm-test-run.sh and tests/lib.sh for
+# every other suite - Befund 1b) must be cleared here: they verify the log
+# itself rather than merely running clean under it.
+FM_TOR_LOG_UNTERDRUECKEN=""
+export FM_TOR_LOG_UNTERDRUECKEN
+
 # --- fixtures ---------------------------------------------------------------
 # HOME_A: a fixture PRIMARY firstmate checkout - carries AGENTS.md and bin/
 # (the signature fm-git-guard.sh looks for) and is a plain, non-worktree repo.

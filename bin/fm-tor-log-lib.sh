@@ -40,7 +40,16 @@
 #   - Field values are JSON-escaped; tabs, newlines, and control characters are
 #     folded so one decision is always exactly one line.
 #
-# FM_HOME resolution: $FM_HOME if set, else the repo this file lives in.
+# Where the log lives: $FM_HOME/state/tor-log normally; when FM_STATE_OVERRIDE
+# is set the decision record follows the overridden world (state override means
+# "operate on THAT state root"), so a suite or daemon child judging a fixture
+# world logs into the fixture's own tor-log and never touches the live one.
+# Test/probe runs that want NO record at all anywhere (pure probes whose only
+# purpose was already served elsewhere) set FM_TOR_LOG_UNTERDRUECKEN=1 -
+# recognized values 1/true/ja/yes (case-insensitive); a differently spelled
+# value is announced on stderr and does NOT suppress, so a typo can never
+# silently blank the live log (Befund 1b, 26.08.: gate decisions from
+# /tmp-fixture suites diluted the live strike-list statistics).
 
 fm_tor_log_home() { # -> the home whose state/tor-log/ is written
   if [ -n "${FM_HOME:-}" ]; then
@@ -48,6 +57,26 @@ fm_tor_log_home() { # -> the home whose state/tor-log/ is written
   else
     (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   fi
+}
+
+fm_tor_log_dir() { # -> the tor-log directory this decision belongs in
+  if [ -n "${FM_STATE_OVERRIDE:-}" ]; then
+    printf '%s/tor-log' "$FM_STATE_OVERRIDE"
+  else
+    printf '%s/state/tor-log' "$(fm_tor_log_home)"
+  fi
+}
+
+fm_tor_log_unterdrueckt() { # -> 0 when this decision must be recorded nowhere
+  local v="${FM_TOR_LOG_UNTERDRUECKEN:-}"
+  case "$v" in
+    ""|0|false|nein|no) return 1 ;;
+    1|[Tt]rue|[Jj]a|[Yy]es) return 0 ;;
+    *)
+      printf 'warn: FM_TOR_LOG_UNTERDRUECKEN %s is not 0/1/true/false/ja/nein/yes/no; logging continues\n' "'$v'" >&2
+      return 1
+      ;;
+  esac
 }
 
 fm_tor_log_json_string() { # <text...> -> a JSON string literal
@@ -62,6 +91,9 @@ fm_tor_log_json_string() { # <text...> -> a JSON string literal
 }
 
 fm_tor_log() { # <tor> <regel-id> <verdikt> <ausweg|-> <kontext...>
+  if fm_tor_log_unterdrueckt; then
+    return 0
+  fi
   if [ "$#" -lt 4 ]; then
     printf 'warn: fm_tor_log needs <tor> <regel-id> <verdikt:gruen|rot|warn> <ausweg|-> [kontext...]; nothing logged\n' >&2
     return 0
@@ -83,7 +115,7 @@ fm_tor_log() { # <tor> <regel-id> <verdikt> <ausweg|-> <kontext...>
   [ -n "$ausweg" ] || ausweg="-"
 
   local dir file line
-  dir="$(fm_tor_log_home)/state/tor-log"
+  dir="$(fm_tor_log_dir)"
   file="$dir/$safe_tor.jsonl"
   line="$(printf '{"ts":%s,"tor":%s,"regel":%s,"verdikt":%s,"ausweg":%s,"kontext":%s}' \
     "$(fm_tor_log_json_string "$(date -u +%Y-%m-%dT%H:%M:%SZ)")" \
