@@ -22,7 +22,9 @@ set -u
 
 ENV_FILE="${FM_ZAI_ENV:-$HOME/.config/claw/env}"
 CURL_BIN="${FM_ZAI_CURL:-curl}"
-MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit"
+# type=2 = Team-Plan-Abruf; type=1/ohne antwortet fuer Team-Keys "kein coding
+# plan" (gemessen 26.08.). data.limits[] fuellt der Provider verzoegert.
+MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit?type=2"
 
 [ -r "$ENV_FILE" ] || { printf 'fm-zai-quota: key file %s unreadable\n' "$ENV_FILE" >&2; exit 2; }
 
@@ -43,6 +45,8 @@ except Exception:
     print("unlesbar: keine JSON-Antwort"); raise SystemExit
 if isinstance(d, dict) and d.get("success") is False:
     print("unlesbar: " + str(d.get("msg", d))[:120]); raise SystemExit
+if isinstance(d, dict) and d.get("success") is True and not d.get("data"):
+    print("Team-Plan aktiv (type=2 success), Monitor liefert noch keine Zahlen"); raise SystemExit
 def zahlen(o, pfad=""):
     if isinstance(o, dict):
         for k, v in o.items():

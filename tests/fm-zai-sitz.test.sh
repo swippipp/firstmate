@@ -40,6 +40,13 @@ seed ZAI_TEAM_KEY_2 70
   && ok "the seat with the larger 5h remainder wins" \
   || fail "expected team-2 to win with the larger remainder (got: $(lauf))"
 
+# --- 1b. real provider schema: data.limits[].percentage is USAGE percent ----
+printf '{"code":200,"success":true,"data":{"limits":[{"type":"TOKEN","percentage":30},{"type":"TIME","percentage":10}]}}' > "$CACHE/monitor-ZAI_TEAM_KEY_1.json"
+printf '{"code":200,"success":true,"data":{"limits":[{"type":"TOKEN","percentage":80}]}}' > "$CACHE/monitor-ZAI_TEAM_KEY_2.json"
+[ "$(lauf)" = "$(printf 'team-1\tZAI_TEAM_KEY_1')" ] \
+  && ok "the limits[] schema is read as usage percent (lower usage wins)" \
+  || fail "expected team-1 (30% used) over team-2 (80% used) (got: $(lauf))"
+
 # --- 2. every seat at the wall -> pack -------------------------------------
 seed ZAI_TEAM_KEY_1 0
 seed ZAI_TEAM_KEY_2 0
@@ -84,6 +91,14 @@ zeilen=$(FM_ZAI_ENV="$ENVF" FM_ZAI_CURL="$QOUT" "$QUOTA")
   && printf '%s' "$zeilen" | grep -q "unlesbar: kein plan" \
   && ok "fm-zai-quota prints one line per key with the provider's answer verbatim" \
   || fail "fm-zai-quota output unexpected: $zeilen"
+
+# ... and a type=2 success with empty data is named as the known provider lag.
+QLEER="$TMP/curl-quota-leer"
+printf '#!/usr/bin/env bash\nprintf %s\n' "'{\"code\":200,\"success\":true,\"data\":{}}'" > "$QLEER"
+chmod +x "$QLEER"
+FM_ZAI_ENV="$ENVF" FM_ZAI_CURL="$QLEER" "$QUOTA" | grep -q "Team-Plan aktiv" \
+  && ok "an empty type=2 success is reported as active-plan-without-numbers" \
+  || fail "empty success data should name the provider lag"
 
 # every selection above left a log line
 [ -s "$CACHE/wahl.jsonl" ] && ok "every selection is logged" || fail "wahl.jsonl is empty"
