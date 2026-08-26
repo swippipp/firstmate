@@ -1,0 +1,49 @@
+# Stehende Rangliste der Autonomiefahrt (O-0135) - EIGENTUM DES CAPTAINS (A15).
+# Der FM zieht von oben; der Captain sortiert jederzeit per Karte/Wort um.
+# Neue feuerbereite Becken reiht der FM HINTEN an (Karte informiert).
+# Nach dem letzten Paket: verbleibende ready-Posten heimweise als Paper-Cut-Pakete.
+# Status wird zur Lesezeit abgeleitet (tasks-axi/Approval-Records), nie hier gepflegt.
+# rang	paket	heim
+1	P1	primaer
+2	H1-P1	heim1
+3	P5	primaer
+4	H2-P1	heim2
+5	H4-H	heim4
+6	P9	primaer
+7	W13	primaer
+8	brett-flaeche-holds	primaer
+9	W10	primaer
+10	W11	primaer
+11	W12	primaer
+12	W9	primaer
+13	P4	primaer
+14	P2	primaer
+15	P3	primaer
+16	P6	primaer
+17	P7	primaer
+18	P8	primaer
+19	H1-P2	heim1
+20	H2-P2	heim2
+21	H3-P1	heim3
+22	H4-A	heim4
+23	H1-P3	heim1
+24	H2-P3	heim2
+25	H3-P2	heim3
+26	H4-D	heim4
+27	H1-P4	heim1
+28	H2-P4	heim2
+29	H3-P3	heim3
+30	H4-B	heim4
+31	H1-P5	heim1
+32	H2-P5	heim2
+33	H3-P4	heim3
+34	H4-F	heim4
+35	H1-P6	heim1
+36	H2-P6	heim2
+37	H4-E	heim4
+38	H1-P7	heim1
+39	H2-P7	heim2
+40	H4-C	heim4
+41	H1-P8	heim1
+42	H2-P8	heim2
+43	H4-G	heim4

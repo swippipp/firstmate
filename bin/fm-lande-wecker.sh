@@ -50,8 +50,12 @@ for f in "$STATE_DIR"/*.status; do
   case $letzte in done:*) ;; *) continue ;; esac
   branch="fm/$bahn"
   git -C "$FM_ROOT" rev-parse --verify -q "refs/heads/$branch" >/dev/null || continue
-  if git -C "$FM_ROOT" merge-base --is-ancestor "$branch" main 2>/dev/null; then
-    continue  # gelandet - Branch nur noch nicht aufgeraeumt
+  # Gelandet-Erkennung per PATCH-Aequivalenz (git cherry), nicht per Vorfahre:
+  # Rebase-Landungen liessen den Branch-Tip ausserhalb der main-Historie und
+  # produzierten Fehlalarme (FM-Befund 27.08., sechs Residuum-Zweige). Eine
+  # Zeile mit '+' = mindestens ein Commit fehlt inhaltlich auf main.
+  if ! git -C "$FM_ROOT" cherry main "$branch" 2>/dev/null | grep -q '^+'; then
+    continue  # gelandet (auch per Rebase) - Branch nur noch nicht aufgeraeumt
   fi
   alter_min=$(( (jetzt - $(stat -c %Y "$f")) / 60 ))
   [ "$alter_min" -ge "$REIFE_MIN" ] || continue
@@ -65,7 +69,8 @@ if [ ${#reife[@]} -eq 0 ]; then
   exit 0
 fi
 
-nachricht="LANDE-WECKER (O-0134, automatisch): ${#reife[@]} Lieferung(en) stehen fertig und ungelandet:"
+FM_INJECT_MARK=$'\xE2\x81\xA3'  # afk-Kontrakt: unmarkierte Zeilen beenden den Away-Modus
+nachricht="${FM_INJECT_MARK}LANDE-WECKER (O-0134, automatisch): ${#reife[@]} Lieferung(en) stehen fertig und ungelandet:"
 for r in "${reife[@]}"; do nachricht="$nachricht $r ·"; done
 nachricht="$nachricht Bitte im naechsten freien Zug die Landungen fahren oder je Branch benennen, worauf die Landung wartet (dann zaehlt das Warten als Zustand, nicht als Vergessen)."
 
