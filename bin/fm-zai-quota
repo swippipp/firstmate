@@ -26,7 +26,58 @@ CURL_BIN="${FM_ZAI_CURL:-curl}"
 # plan" (gemessen 26.08.). data.limits[] fuellt der Provider verzoegert.
 MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit?type=2"
 
+# Team-Scope (O-0114-Nachtrag 26.08.): der Team-Monitor ist organisations- und
+# projekt-gescoped. Ohne diese Header antwortet er "success" mit LEEREM data -
+# das war die wochenlange Leere. Die IDs stehen in der eingeloggten Konsole
+# (localStorage Bigmodel-Organization / Bigmodel-Project) und kommen aus
+# ~/.config/claw/env als ZAI_TEAM_ORG_ID / ZAI_TEAM_PROJECT_ID. Ohne die
+# Variablen laufen die Abfragen unveraendert (Header weglassen, nie leer senden).
+scope_args_bauen() { # liest die IDs aus Umgebung ODER der Env-Datei (sed wie die Keys)
+  SCOPE_ARGS=()
+  local org="${ZAI_TEAM_ORG_ID:-}" proj="${ZAI_TEAM_PROJECT_ID:-}"
+  [ -z "$org" ] && [ -r "$ENV_FILE" ] && org=$(sed -n 's/^ZAI_TEAM_ORG_ID=//p' "$ENV_FILE" | head -n 1)
+  [ -z "$proj" ] && [ -r "$ENV_FILE" ] && proj=$(sed -n 's/^ZAI_TEAM_PROJECT_ID=//p' "$ENV_FILE" | head -n 1)
+  [ -n "$org" ] && SCOPE_ARGS+=(-H "bigmodel-organization: $org")
+  [ -n "$proj" ] && SCOPE_ARGS+=(-H "bigmodel-project: $proj")
+}
+scope_args_bauen
+
 [ -r "$ENV_FILE" ] || { printf 'fm-zai-quota: key file %s unreadable\n' "$ENV_FILE" >&2; exit 2; }
+
+# --mitglieder: Verbrauch je Team-Mitglied (Monitor sub-account-rank, letzte 7
+# Tage): Name, 5h-/Wochen-Prozent, Gesamt-Tokens, Modell-Aufschluesselung.
+# Braucht die Team-Scope-Header wie die Quota-Abfrage.
+if [ "${1:-}" = "--mitglieder" ]; then
+  scope_args_bauen
+  key=$(sed -n 's/^ZAI_TEAM_KEY_1=//p' "$ENV_FILE" | head -n 1)
+  [ -n "$key" ] || { echo "fm-zai-quota: ZAI_TEAM_KEY_1 fehlt" >&2; exit 2; }
+  von=$(date -d '7 days ago' '+%Y-%m-%d %H:%M:%S'); bis=$(date '+%Y-%m-%d %H:%M:%S')
+  "$CURL_BIN" -sSG -m 10 -H "Authorization: $key" -H "Accept-Language: en-US,en" \
+    ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
+    --data-urlencode "startTime=$von" --data-urlencode "endTime=$bis" \
+    "https://api.z.ai/api/monitor/usage/sub-account-rank" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("unlesbar: keine JSON-Antwort"); raise SystemExit(1)
+if not d.get("success"):
+    print("unlesbar: " + str(d.get("msg"))[:120]); raise SystemExit(1)
+def punkt(n):
+    return f"{n:,}".replace(",", ".")
+for m in (d.get("data") or {}).get("rankList") or []:
+    r = m.get("rateLimitStatus") or {}
+    modelle = ", ".join(x.get("modelName", "?") + " " + punkt(x.get("tokens", 0))
+                        for x in (m.get("modelTokenDetails") or [])[:4])
+    felder = [str(m.get("memberName")),
+              "5h " + str(r.get("fiveHourPercentage")) + "%",
+              "Woche " + str(r.get("weekPercentage")) + "%",
+              punkt(m.get("totalTokens", 0)) + " Tokens (7 Tage)",
+              modelle]
+    print("\t".join(felder))
+'
+  exit $?
+fi
 
 zeile() { # <sitz> <env-name>
   local sitz=$1 name=$2 key antwort stand
@@ -35,7 +86,7 @@ zeile() { # <sitz> <env-name>
     printf '%s\t%s\tkein Key hinterlegt\n' "$sitz" "$name"
     return 0
   fi
-  antwort=$("$CURL_BIN" -sS -m 5 -H "Authorization: $key" -H "Accept-Language: en-US,en" "$MONITOR_URL" 2>&1) \
+  antwort=$("$CURL_BIN" -sS -m 5 -H "Authorization: $key" -H "Accept-Language: en-US,en" ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} "$MONITOR_URL" 2>&1) \
     || { printf '%s\t%s\tunlesbar: %s\n' "$sitz" "$name" "$(printf '%s' "$antwort" | head -c 120)"; return 0; }
   stand=$(printf '%s' "$antwort" | python3 -c '
 import json, sys
@@ -47,6 +98,24 @@ if isinstance(d, dict) and d.get("success") is False:
     print("unlesbar: " + str(d.get("msg", d))[:120]); raise SystemExit
 if isinstance(d, dict) and d.get("success") is True and not d.get("data"):
     print("Team-Plan aktiv (type=2 success), Monitor liefert noch keine Zahlen"); raise SystemExit
+# Bekannte Form (gemessen 26.08., mit Team-Scope-Headern): data.limits[] mit
+# unit=3 (5h-Fenster) und unit=6 (Wochenfenster), Werte currentValue/usage/
+# percentage/nextResetTime. Diese Form wird als klare c5/cw-Tokens gedruckt;
+# jede andere Form faellt auf den generischen Zahlen-Dump zurueck.
+limits = (d.get("data") or {}).get("limits") if isinstance(d, dict) else None
+if isinstance(limits, list) and limits:
+    fenster = {3: "c5", 6: "cw"}
+    teile = []
+    for l in limits:
+        name = fenster.get(l.get("unit"))
+        if not name or not isinstance(l.get("percentage"), (int, float)):
+            continue
+        teile.append(f"{name}=" + str(l["percentage"]))
+        for feld, kurz in (("currentValue", "wert"), ("usage", "limit"), ("nextResetTime", "reset")):
+            if isinstance(l.get(feld), (int, float)):
+                teile.append(f"{name}_{kurz}={l[feld]}")
+    if teile:
+        print("; ".join(teile)); raise SystemExit
 def zahlen(o, pfad=""):
     if isinstance(o, dict):
         for k, v in o.items():
@@ -65,5 +134,8 @@ print("; ".join(werte)[:300] if werte else "unlesbar: keine Zahlen in der Antwor
 while IFS= read -r name; do
   zeile "team-${name##*_}" "$name"
 done < <(sed -n 's/^\(ZAI_TEAM_KEY_[0-9]\+\)=.*/\1/p' "$ENV_FILE" | sort -t_ -k4 -n)
-grep -q '^ZAI_API_KEY=' "$ENV_FILE" && zeile pack ZAI_API_KEY
+# Achtung Pack: der Monitor rechnet nach NUTZER+Scope, nicht nach Key - der
+# Pack-Key meldet die Sitz-Quota seines Inhabers (gemessen 26.08.: identisch
+# mit team-2), NICHT das 100M-Pack-Guthaben. Die Zeile sagt das ehrlich dazu.
+grep -q '^ZAI_API_KEY=' "$ENV_FILE" && zeile pack ZAI_API_KEY | sed 's/$/; hinweis=Sitz-Quota des Key-Inhabers, kein Pack-Guthaben/'
 exit 0

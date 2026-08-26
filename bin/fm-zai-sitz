@@ -40,6 +40,22 @@ TTL="${FM_ZAI_TTL:-60}"
 # provider-seitig - bis dahin traegt der Round-Robin unten).
 MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit?type=2"
 
+# Team-Scope (O-0114-Nachtrag 26.08.): der Team-Monitor ist organisations- und
+# projekt-gescoped. Ohne diese Header antwortet er "success" mit LEEREM data -
+# das war die wochenlange Leere. Die IDs stehen in der eingeloggten Konsole
+# (localStorage Bigmodel-Organization / Bigmodel-Project) und kommen aus
+# ~/.config/claw/env als ZAI_TEAM_ORG_ID / ZAI_TEAM_PROJECT_ID. Ohne die
+# Variablen laufen die Abfragen unveraendert (Header weglassen, nie leer senden).
+scope_args_bauen() { # liest die IDs aus Umgebung ODER der Env-Datei (sed wie die Keys)
+  SCOPE_ARGS=()
+  local org="${ZAI_TEAM_ORG_ID:-}" proj="${ZAI_TEAM_PROJECT_ID:-}"
+  [ -z "$org" ] && [ -r "$ENV_FILE" ] && org=$(sed -n 's/^ZAI_TEAM_ORG_ID=//p' "$ENV_FILE" | head -n 1)
+  [ -z "$proj" ] && [ -r "$ENV_FILE" ] && proj=$(sed -n 's/^ZAI_TEAM_PROJECT_ID=//p' "$ENV_FILE" | head -n 1)
+  [ -n "$org" ] && SCOPE_ARGS+=(-H "bigmodel-organization: $org")
+  [ -n "$proj" ] && SCOPE_ARGS+=(-H "bigmodel-project: $proj")
+}
+scope_args_bauen
+
 mkdir -p "$CACHE_DIR"
 
 die() { printf 'fm-zai-sitz: %s\n' "$*" >&2; exit 2; }
@@ -75,7 +91,7 @@ monitor_rest() {
   if [ ! -f "$cache" ]; then
     key=$(key_fuer "$name")
     [ -n "$key" ] || { printf -- '-'; return 0; }
-    "$CURL_BIN" -sS -m 3 -H "Authorization: $key" -H "Accept-Language: en-US,en" \
+    "$CURL_BIN" -sS -m 3 -H "Authorization: $key" -H "Accept-Language: en-US,en" ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
       "$MONITOR_URL" > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" \
       || { rm -f "$cache.tmp"; printf -- '-'; return 0; }
   fi
