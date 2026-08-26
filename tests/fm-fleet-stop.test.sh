@@ -151,6 +151,25 @@ else
   ok "an unknown origin is refused"
 fi
 
+# --- L100/N2: set/lift propagate into every registered secondmate home ------
+PROPT=$(mktemp -d "${TMPDIR:-/tmp}/fsprop.XXXX")
+mkdir -p "$PROPT/prim/state" "$PROPT/prim/data" "$PROPT/heimA/state" "$PROPT/heimB/state"
+printf -- '- sm-alpha (home: %s; scope: x; projects: y; added 2026-08-26)\n- sm-fern (host: gex; root: /r; home: /fern; scope: x; projects: y; added 2026-08-26)\n- sm-beta (home: %s; scope: x; projects: y; added 2026-08-26)\n' "$PROPT/heimA" "$PROPT/heimB" > "$PROPT/prim/data/secondmates.md"
+aus=$(FM_HOME="$PROPT/prim" FM_ROOT_OVERRIDE="$PROPT/prim" "$REPO/bin/fm-fleet-stop.sh" set --wortlaut "Probe" --origin captain 2>&1)
+if [ -f "$PROPT/heimA/state/.fleet-stop" ] && [ -f "$PROPT/heimB/state/.fleet-stop" ] \
+   && printf '%s' "$aus" | grep -q FERNHEIM; then
+  ok "set propagates the stop into every local secondmate home and names the remote one"
+else
+  fail "set did not propagate (aus=$aus)"
+fi
+FM_HOME="$PROPT/prim" FM_ROOT_OVERRIDE="$PROPT/prim" "$REPO/bin/fm-fleet-stop.sh" lift >/dev/null 2>&1
+if [ ! -f "$PROPT/heimA/state/.fleet-stop" ] && [ ! -f "$PROPT/heimB/state/.fleet-stop" ]; then
+  ok "lift removes the stop from every local secondmate home"
+else
+  fail "lift left a secondmate stop behind"
+fi
+rm -rf "$PROPT"
+
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failure(s)" >&2
   exit 1

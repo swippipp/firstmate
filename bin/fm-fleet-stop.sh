@@ -50,6 +50,53 @@ flag_origin() { # origin of the current flag; legacy flags without the line are 
   printf '%s' "${o:-captain}"
 }
 
+# L100/N2: a fleet stop that lives only in the primary home stops nothing in a
+# second home - their check shims read THEIR OWN state/.fleet-stop (measured
+# 26.08.: stop set 16:36Z in the primary, homes 1/2/4 never carried a marker).
+# Every set/lift therefore propagates to each registered secondmate home and
+# prints a per-home Vollzugsliste; an unreachable home is LOUD, never silent.
+# Only local homes are touched (a `host:` record marks a remote home - named
+# as skipped so the operator knows the stop does not reach it from here).
+zweitheime() { # print "sm-id<TAB>home" per registered secondmate, local only
+  local datei="$FM_HOME/data/secondmates.md" zeile id heim
+  [ -r "$datei" ] || return 0
+  while IFS= read -r zeile; do
+    id=$(printf '%s' "$zeile" | sed -n 's/^[-*] *\(sm-[a-z0-9-]*\).*/\1/p')
+    [ -n "$id" ] || continue
+    case "$zeile" in
+      *'(host:'*|*'; host:'*)
+        echo "  $id: FERNHEIM - Stopp erreicht es von hier nicht (dort setzen/heben)" >&2
+        continue
+        ;;
+    esac
+    heim=$(printf '%s' "$zeile" | sed -n 's/.*home: *\([^;)]*\).*/\1/p' | sed 's/ *$//')
+    [ -n "$heim" ] && printf '%s\t%s\n' "$id" "$heim"
+  done < "$datei"
+}
+
+propagiere() { # set|lift - mirror the primary flag into every secondmate home
+  local aktion=$1 id heim ziel
+  while IFS=$'\t' read -r id heim; do
+    [ -n "$heim" ] || continue
+    case "$heim" in "$FM_HOME") continue ;; esac
+    ziel="$heim/state/.fleet-stop"
+    if [ "$aktion" = set ]; then
+      if mkdir -p "$heim/state" 2>/dev/null && cp -f "$FLAG" "$ziel" 2>/dev/null; then
+        echo "  $id: Stopp gesetzt ($ziel)"
+      else
+        echo "  $id: NICHT ERREICHT ($heim) - Stopp dort von Hand setzen!" >&2
+      fi
+    else
+      if [ -f "$ziel" ]; then
+        rm -f "$ziel" && echo "  $id: Stopp gehoben" \
+          || echo "  $id: NICHT GEHOBEN ($ziel) - von Hand entfernen!" >&2
+      else
+        echo "  $id: trug keinen Stopp"
+      fi
+    fi
+  done < <(zweitheime)
+}
+
 cmd="${1:-}"
 case "$cmd" in
   set)
@@ -80,6 +127,7 @@ case "$cmd" in
     } > "$tmp"
     mv -f "$tmp" "$FLAG"
     echo "fleet stop set: $FLAG (origin=$origin)"
+    propagiere set
     ;;
   origin)
     if [ -f "$FLAG" ]; then
@@ -120,6 +168,7 @@ case "$cmd" in
     cat "$FLAG"
     rm -f "$FLAG"
     echo "fleet stop lifted"
+    propagiere lift
     ;;
   --help|-h|help|"")
     usage
