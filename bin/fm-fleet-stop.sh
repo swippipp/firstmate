@@ -74,13 +74,29 @@ zweitheime() { # print "sm-id<TAB>home" per registered secondmate, local only
   done < "$datei"
 }
 
-propagiere() { # set|lift - mirror the primary flag into every secondmate home
-  local aktion=$1 id heim ziel
+propagiere() { # set|lift [only_origin] - mirror the primary flag into every secondmate home
+  # Origin-Treue je ZIEL-Flagge (O-0135-Gauntlet 27.08.): ein Zweitheim kann
+  # einen eigenen, von Hand gesetzten Captain-Stopp tragen (Vorfall, teilweise
+  # vollzogener Lift). Ein automatischer Lift mit only_origin darf NUR Flaggen
+  # dieses Origins entfernen; ein set ueberschreibt nie eine staerkere
+  # Captain-Flagge mit einer tagesschluss-Flagge. Flaggen ohne origin-Zeile
+  # lesen als captain (fail toward the stronger stop, wie flag_origin).
+  local aktion=$1 only_origin="${2:-}" id heim ziel ziel_origin
   while IFS=$'\t' read -r id heim; do
     [ -n "$heim" ] || continue
     case "$heim" in "$FM_HOME") continue ;; esac
     ziel="$heim/state/.fleet-stop"
     if [ "$aktion" = set ]; then
+      if [ -f "$ziel" ]; then
+        ziel_origin="$(sed -n '2s/^origin=//p' "$ziel" 2>/dev/null)"
+        [ -n "$ziel_origin" ] || ziel_origin=captain
+        neu_origin="$(sed -n '2s/^origin=//p' "$FLAG" 2>/dev/null)"
+        [ -n "$neu_origin" ] || neu_origin=captain
+        if [ "$ziel_origin" = captain ] && [ "$neu_origin" != captain ]; then
+          echo "  $id: traegt eigenen CAPTAIN-Stopp - nicht ueberschrieben ($ziel)"
+          continue
+        fi
+      fi
       if mkdir -p "$heim/state" 2>/dev/null && cp -f "$FLAG" "$ziel" 2>/dev/null; then
         echo "  $id: Stopp gesetzt ($ziel)"
       else
@@ -88,6 +104,14 @@ propagiere() { # set|lift - mirror the primary flag into every secondmate home
       fi
     else
       if [ -f "$ziel" ]; then
+        if [ -n "$only_origin" ]; then
+          ziel_origin="$(sed -n '2s/^origin=//p' "$ziel" 2>/dev/null)"
+          [ -n "$ziel_origin" ] || ziel_origin=captain
+          if [ "$ziel_origin" != "$only_origin" ]; then
+            echo "  $id: Stopp hat origin '$ziel_origin', nicht '$only_origin' - STEHT (nur Captain-Wort hebt ihn)"
+            continue
+          fi
+        fi
         rm -f "$ziel" && echo "  $id: Stopp gehoben" \
           || echo "  $id: NICHT GEHOBEN ($ziel) - von Hand entfernen!" >&2
       else
@@ -168,7 +192,7 @@ case "$cmd" in
     cat "$FLAG"
     rm -f "$FLAG"
     echo "fleet stop lifted"
-    propagiere lift
+    propagiere lift "$only_origin"
     ;;
   --help|-h|help|"")
     usage

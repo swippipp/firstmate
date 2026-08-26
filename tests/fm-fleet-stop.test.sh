@@ -168,6 +168,42 @@ if [ ! -f "$PROPT/heimA/state/.fleet-stop" ] && [ ! -f "$PROPT/heimB/state/.flee
 else
   fail "lift left a secondmate stop behind"
 fi
+# Origin-Treue der Propagation (O-0135-Gauntlet 27.08.):
+# (a) Ein von Hand gesetzter CAPTAIN-Stopp in einem Zweitheim uebersteht den
+#     automatischen tagesschluss-Lift der Primaerflagge.
+# (b) set mit origin=tagesschluss ueberschreibt eine bestehende Zweitheim-
+#     Captain-Flagge nicht.
+PROPT2=$(mktemp -d "${TMPDIR:-/tmp}/fleetstop-origin.XXXXXX")
+mkdir -p "$PROPT2/prim/state" "$PROPT2/prim/data" "$PROPT2/heimA/state"
+printf -- '- sm-alpha (home: %s; scope: x; projects: y; added 2026-08-26)\n' "$PROPT2/heimA" > "$PROPT2/prim/data/secondmates.md"
+# Zweitheim traegt einen eigenen Captain-Stopp (Handsetzung im Vorfall)
+printf 'wortlaut=Halt von Hand\norigin=captain\n' > "$PROPT2/heimA/state/.fleet-stop"
+# Primaer: tagesschluss-Stopp setzen -> darf die Captain-Flagge nicht ueberschreiben
+aus=$(FM_HOME="$PROPT2/prim" FM_ROOT_OVERRIDE="$PROPT2/prim" "$REPO/bin/fm-fleet-stop.sh" set --wortlaut "Tagesschluss" --origin tagesschluss 2>&1)
+if grep -q '^origin=captain$' "$PROPT2/heimA/state/.fleet-stop" \
+   && printf '%s' "$aus" | grep -q 'CAPTAIN-Stopp - nicht ueberschrieben'; then
+  ok "set (tagesschluss) laesst eine bestehende Zweitheim-Captain-Flagge stehen"
+else
+  fail "set ueberschrieb die Zweitheim-Captain-Flagge (aus=$aus)"
+fi
+# Automatischer Lift (only-origin tagesschluss) -> Primaer faellt, Captain-Zweitheim steht
+aus=$(FM_HOME="$PROPT2/prim" FM_ROOT_OVERRIDE="$PROPT2/prim" "$REPO/bin/fm-fleet-stop.sh" lift --only-origin tagesschluss 2>&1)
+if [ ! -f "$PROPT2/prim/state/.fleet-stop" ] && [ -f "$PROPT2/heimA/state/.fleet-stop" ] \
+   && printf '%s' "$aus" | grep -q "origin 'captain'"; then
+  ok "auto-lift hebt den Zweitheim-Captain-Stopp NICHT (Origin-Treue je Flagge)"
+else
+  fail "auto-lift riss den Zweitheim-Captain-Stopp mit um (aus=$aus)"
+fi
+# Captain-Lift (ohne only-origin) darf ihn weiterhin heben
+printf 'wortlaut=x\norigin=captain\n' > "$PROPT2/prim/state/.fleet-stop"
+FM_HOME="$PROPT2/prim" FM_ROOT_OVERRIDE="$PROPT2/prim" "$REPO/bin/fm-fleet-stop.sh" lift >/dev/null 2>&1
+if [ ! -f "$PROPT2/heimA/state/.fleet-stop" ]; then
+  ok "Captain-Lift (ohne only-origin) hebt auch den Zweitheim-Captain-Stopp"
+else
+  fail "Captain-Lift liess den Zweitheim-Stopp stehen"
+fi
+rm -rf "$PROPT2"
+
 rm -rf "$PROPT"
 
 if [ "$FAILS" -gt 0 ]; then
