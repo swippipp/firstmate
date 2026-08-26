@@ -39,6 +39,17 @@
 #      wenn gerade kein Pruefagent laeuft.
 #   4. Schlaegt Alarm, wenn ein Konto leerlaeuft, waehrend ein anderes viel frei hat.
 #
+# L104 (26.08., Ox-Tod): der Leerlauf-Waechter empfahl dreimal das gesperrte
+# Konto 1, weil O-0108 am Orderbuch keinen Leser hatte. Vor jeder
+# Konto-Empfehlung (--worker) liest dieses Skript jetzt SELBST, was ein Konto
+# disqualifiziert: (a) die Rolle aus der Akte via bin/fm-konten-lib.sh (die
+# einziger Leser von config/konten.tsv bleibt - nichts wird hier selbst
+# geparst), und (b) aktive Konto-Orders ueber den einen maschinenlesbaren
+# Orderbuch-Leser (bin/fm-order-gate-lib.sh; enforce-Zeilen wie O-0083-
+# Klasse). Ein rollenfremdes oder durch eine aktive Order gesperrtes Konto
+# wird nicht empfohlen; auf stderr nennt die Empfehlung ihre Lesequellen und
+# jede Ablehnung Order-ID und Wortlaut. stdout bleibt eine Zeile - der Pfad.
+#
 # Nutzung:
 #   fm-lastverteilung            # pruefen, ggf. umstellen, Bericht auf stdout
 #   fm-lastverteilung --pruefen  # nur berichten, nie umstellen (Vorschau)
@@ -49,6 +60,8 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bin/fm-konten-lib.sh
 . "$SCRIPT_DIR/fm-konten-lib.sh"
+# shellcheck source=bin/fm-order-gate-lib.sh
+. "$SCRIPT_DIR/fm-order-gate-lib.sh"
 
 MODUS="${1:-}"
 NM_CONFIG="${FM_LB_NM_CONFIG:-$HOME/.no-mistakes/config.yaml}"
@@ -92,11 +105,16 @@ if [ -z "$FIRSTMATE_KONTO" ]; then
 fi
 
 # verteilbar <speicher>: darf dieser Speicher ueberhaupt neue Last bekommen?
+# ORDER_GESPERRT sammelt die Speicher, gegen die eine AKTIVE Konto-Order einen
+# worker-Spawn verbietet (siehe worker_konto_waehlen): einmal abgelehnt,
+# werden sie in jedem weiteren Ranglauf uebergangen.
+ORDER_GESPERRT=""
 verteilbar() {
   [ "$1" != "$FIRSTMATE_KONTO" ] || return 1
+  case " $ORDER_GESPERRT " in *" $1 "*) return 1 ;; esac
   case "${ROLLE[$1]:-}" in
     offiziere-worker|restverbrauch) return 0 ;;
-    *) return 1 ;;   # firstmate und captain-handbetrieb sind nie Ziel
+    *) return 1 ;;   # firstmate, gesperrt und captain-handbetrieb sind nie Ziel
   esac
 }
 
@@ -249,19 +267,58 @@ ziel_bestimmen() {
   echo "$best"
 }
 
+# L104 (26.08., Ox-Tod): die Konto-Empfehlung las die Order BISHER nicht - der
+# Leerlauf-Waechter empfahl deshalb dreimal das gesperrte Konto 1, weil O-0108
+# dort keinen Leser hatte. Die Wahl liest jetzt an dieser EINEN Stelle statt in
+# jedem Waechter selbst: das Regel-Zielkonto wird gegen AKTIVE Konto-Orders am
+# Orderbuch geprueft (fm_order_gate_check spawn account=<speicher>; nur
+# enforce-Zeilen mit account= koennen treffen). Trifft eine Sperre, scheidet der
+# Kandidat aus (stderr nennt Order-ID und Wortlaut) und es wird neu gerankt;
+# bleibt nichts uebrig oder ist eine enforce-Zeile unlesbar, wird LAUT
+# verweigert - nie still ein Konto raten.
+worker_konto_waehlen() {
+  local kandidat blocked rc zeile
+  while :; do
+    kandidat=$(ziel_bestimmen "$SCHWELLE_VOLL")
+    [ -n "$kandidat" ] || kandidat=$(ziel_bestimmen 1)
+    [ -n "$kandidat" ] || return 1
+    blocked="$(fm_order_gate_check spawn "account=$kandidat")"
+    rc=$?
+    if [ "$rc" = 0 ]; then
+      printf '%s\n' "$kandidat"
+      return 0
+    elif [ "$rc" = 1 ]; then
+      ORDER_GESPERRT="$ORDER_GESPERRT $kandidat"
+      while IFS= read -r zeile; do
+        [ -n "$zeile" ] || continue
+        echo "fm-lastverteilung: Konto $kandidat empfehle ich nicht - aktive Order dagegen:" >&2
+        echo "fm-lastverteilung:   ${zeile//$'\t'/ /}" >&2
+      done <<< "$blocked"
+    else
+      # Enforce-Eintrag unlesbar: das Tor darf nie schaetzen, was gemeint war.
+      echo "fm-lastverteilung: Orderbuch-Lesung fehlgeschlagen (unlesbare enforce-Zeile) - keine Empfehlung. Ausweg: bin/fm-order.sh show bzw. Order reparieren, dann neu." >&2
+      return 2
+    fi
+  done
+}
+
 # ── Nur die Worker-Empfehlung? ──────────────────────────────────────────────────
 if [ "$MODUS" = "--worker" ]; then
-  z=$(ziel_bestimmen "$SCHWELLE_VOLL"); [ -z "$z" ] && z=$(ziel_bestimmen 1)
+  z=$(worker_konto_waehlen); wrc=$?
+  if [ "$wrc" = 0 ]; then
+    printf '%s\n' "${PFAD[$z]}"
+    # Die Empfehlung nennt ihre Lesequellen (L104): die Rolle kam oben aus der
+    # Akte via fm-konten-lib.sh, die Orders kamen vom Orderbuch-Leser.
+    echo "fm-lastverteilung: Empfehlung $z (${ROLLE[$z]}) - Rolle aus $(fm_konten_akte) via bin/fm-konten-lib.sh, aktive Konto-Orders aus $(fm_order_gate_home)/data/entscheide via bin/fm-order-gate-lib.sh geprueft (keine Sperrorder)." >&2
+    exit 0
+  fi
+  [ "$wrc" = 2 ] && exit 1
   # BEFUND 20.08. (Auftrag fm-lastverteilung-wochenschranke): diese Weiche kannte
   # ein neues Konto nicht und fiel fuer JEDEN unbekannten Wert - auch fuer "kein
   # Konto startfaehig" - stumm auf ein Konto zurueck. So wurde dreimal ein Konto
   # mit 0 % Wochenrest vergeben. Die Weiche kommt jetzt aus der Akte und kann
   # kein Konto mehr uebersehen; ohne Ziel verweigert sie LAUT.
-  if [ -n "$z" ] && [ -n "${PFAD[$z]:-}" ]; then
-    printf '%s\n' "${PFAD[$z]}"
-    exit 0
-  fi
-  echo "fm-lastverteilung: kein startfaehiges Worker-Konto (alle gesperrt, unlesbar oder Wochenrest unter ${SCHWELLE_WOCHE_HART}%) - warten oder Captain fragen" >&2
+  echo "fm-lastverteilung: kein startfaehiges Worker-Konto (alle gesperrt, rollenfremd, durch Orders geblockt, unlesbar oder Wochenrest unter ${SCHWELLE_WOCHE_HART}%) - warten oder Captain fragen" >&2
   exit 1
 fi
 

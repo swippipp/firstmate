@@ -16,6 +16,13 @@
 #   5. An unreadable reading is never a number: a storage whose quota answer
 #      is stale is skipped, and with nothing left --worker refuses loudly
 #      (stderr + exit 1) instead of guessing.
+#   6. The recommendation reads the ORDER BOOK itself (L104: the leerlauf
+#      watcher passed --worker's print straight through while O-0108 had no
+#      reader): an ACTIVE account= enforce line removes that storage from
+#      every rank (red case), without the order the same ledger recommends it
+#      (green case); total lockout refuses loudly naming each blocking order,
+#      and an EXPIRED order stops binding. stdout stays one path line; stderr
+#      names the read sources.
 #
 # Isolation: fixture ledger, fixture HOME and wrapper dir under mktemp, and a
 # PATH shim for quota-axi that answers from per-storage fixture files keyed by
@@ -83,7 +90,7 @@ lauf() { # lauf <akte> [args...]
   local a=$1; shift
   HOME="$H" PATH="$SHIM:$PATH" FM_TEST_QUOTA_DIR="$QUOTA" \
     FM_KONTEN_AKTE="$a" FM_LB_WRAPPER_DIR="$WRAP" \
-    FM_LB_NM_CONFIG="$TMP/nm.yaml" "$LB" "$@"
+    FM_LB_NM_CONFIG="$TMP/nm.yaml" FM_HOME="$H" "$LB" "$@"
 }
 
 printf 'claude: %s\n' "$WRAP/claude1" > "$TMP/nm.yaml"
@@ -181,6 +188,74 @@ REPORT="$(lauf "$A7" --pruefen 2>&1)"
 printf '%s\n' "$REPORT" | grep -q 'konto-2 \[offiziere-worker\]: UNLESBAR' \
   && ok "the stale storage is reported as UNLESBAR, not as a percentage" \
   || fail "a stale reading must be reported as UNLESBAR: $REPORT"
+
+# --- 6. an active account order vetoes the recommendation (L104) ------------
+bestellung() { # bestellung <datei> <id> <expires> [enforce...]
+  local datei=$1 id=$2 expires=$3 e
+  shift 3
+  {
+    printf 'id: %s\ntype: directive\nsubject: fixtur-konto-order\nstatus: active\n' "$id"
+    printf 'scope: fixture\nsource: captain\nrecorded: 2026-08-26T10:00:00Z\ndue: -\n'
+    printf 'expires: %s\ntask: -\n' "$expires"
+    for e in "$@"; do printf 'enforce: %s\n' "$e"; done
+    printf '\n## wording (verbatim, original language)\nkonto schonen\n'
+    printf '\n## translation (EN, marked)\n(none)\n'
+  } > "$datei"
+}
+
+ORDERS="$H/data/entscheide/2099-01-01"
+mkdir -p "$ORDERS"
+
+A8="$TMP/akte-orders.tsv"
+akte "$A8" captain-handbetrieb offiziere-worker firstmate offiziere-worker
+lesung .claude   95 95
+lesung .claude1  99 99        # best worker candidate
+lesung .claude2  10 10        # the seat, fullest of all, never fleet
+lesung .claude3  50 50        # second-best worker candidate
+
+# Green case: no order book yet - the rank rule alone picks konto-1.
+GOT="$(lauf "$A8" --worker 2>"$TMP/e")" && RC=0 || RC=$?
+[ "$RC" = 0 ] && [ "$GOT" = "$H/.claude1" ] \
+  && ok "without orders the best-ranked storage is recommended (green)" \
+  || fail "expected $H/.claude1 green case (rc=$RC), got '$GOT': $(cat "$TMP/e")"
+grep -q 'Rolle aus .* via bin/fm-konten-lib.sh' "$TMP/e" \
+  && grep -q 'via bin/fm-order-gate-lib.sh geprueft' "$TMP/e" \
+  && ok "the recommendation names its read sources on stderr" \
+  || fail "stderr must name role ledger and order-book reader: $(cat "$TMP/e")"
+
+# Red case: an ACTIVE account= order locks konto-1 out of every rank; konto-3
+# is recommended instead and the refusal names the order id and its wording.
+bestellung "$ORDERS/order-O-T101.md" O-T101 9999-12-31 "spawn account=konto-1"
+GOT="$(lauf "$A8" --worker 2>"$TMP/e")" && RC=0 || RC=$?
+[ "$RC" = 0 ] && [ "$GOT" = "$H/.claude3" ] \
+  && ok "an active account order removes the blocked storage from the ranks (red -> next best)" \
+  || fail "expected $H/.claude3 red case (rc=$RC), got '$GOT': $(cat "$TMP/e")"
+grep -q 'Konto konto-1 empfehle ich nicht' "$TMP/e" \
+  && grep -q 'O-T101' "$TMP/e" \
+  && grep -q 'konto schonen' "$TMP/e" \
+  && ok "the stderr names the blocking order id and its verbatim wording" \
+  || fail "stderr must carry order id + wording: $(cat "$TMP/e")"
+
+# Total lockout: BOTH worker storages blocked -> loud refusal, exit 1.
+bestellung "$ORDERS/order-O-T102.md" O-T102 9999-12-31 "spawn account=konto-3"
+OUT="$(lauf "$A8" --worker 2>&1)" && RC=0 || RC=$?
+if [ "$RC" = 1 ] && printf '%s\n' "$OUT" | grep -q 'kein startfaehiges Worker-Konto'; then
+  ok "a fully ordered-lockout fleet refuses loudly instead of guessing"
+else
+  fail "total lockout must refuse loudly (rc=$RC): $OUT"
+fi
+
+rm -f "$ORDERS"/order-O-*.md
+
+# An EXPIRED order stops binding: the same enforce line with a past date lets
+# konto-1 return to the top rank without any rejection line.
+bestellung "$ORDERS/order-O-T103.md" O-T103 2000-01-01 "spawn account=konto-1"
+GOT="$(lauf "$A8" --worker 2>"$TMP/e")" && RC=0 || RC=$?
+{ [ "$RC" = 0 ] && [ "$GOT" = "$H/.claude1" ]; } && ! grep -q 'empfehle ich nicht' "$TMP/e" \
+  && ok "an expired order no longer binds (like pin and recite treat it)" \
+  || fail "expired order must not block (rc=$RC): got '$GOT', $(cat "$TMP/e")"
+
+rm -f "$ORDERS"/order-O-*.md
 
 echo
 if [ "$FAILS" -eq 0 ]; then
