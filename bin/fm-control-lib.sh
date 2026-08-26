@@ -63,10 +63,11 @@ fm_control_verb_allowed() {  # <verb>
 # claude-ox is a distinct verified control-plane value for the claude
 # family's Ox Alpha launch profile (config/crew-dispatch.json rule 1's
 # `claude1 --ox` wrapper) - the same family-variant pattern as pi-signed
-# alongside pi.
+# alongside pi. claude-zai (GLM-5.3 via `claude1 --zai`, z.ai token pack)
+# shares that pattern: same CLI, same control mechanics, different provider.
 fm_control_harness_supported() {  # <harness>
   case "${1-}" in
-    claude|claude-ox|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse) return 0 ;;
+    claude|claude-ox|claude-zai|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse) return 0 ;;
   esac
   return 1
 }

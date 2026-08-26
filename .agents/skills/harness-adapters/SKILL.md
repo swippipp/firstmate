@@ -3,7 +3,7 @@ name: harness-adapters
 description: >-
   Pointer skill for firstmate harness operations.
   Use before spawning or recovering a crewmate or secondmate, handling a trust dialog, sending a harness-specific skill invocation, interrupting or exiting an agent, resuming an exited agent, or verifying a new harness adapter.
-  Names the executable owner for each question and points at the verified per-adapter facts for claude, claude-ox, codex, opencode, pi, pi-signed, grok, kimi, cursor, and muse.
+  Names the executable owner for each question and points at the verified per-adapter facts for claude, claude-ox, claude-zai, codex, opencode, pi, pi-signed, grok, kimi, cursor, and muse.
 user-invocable: false
 metadata:
   internal: true

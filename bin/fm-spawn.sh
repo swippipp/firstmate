@@ -115,7 +115,7 @@
 #   profile consultation. A --secondmate spawn is exempt and resolves the SECONDMATE
 #   harness (config/secondmate-harness -> config/crew-harness -> own), so the
 #   secondmate-vs-crewmate split is DURABLE across every respawn (recovery,
-#   /updatefirstmate, restart). A bare adapter name (claude|claude-ox|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
+#   /updatefirstmate, restart). A bare adapter name (claude|claude-ox|claude-zai|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
 #   overrides it for this spawn (either kind). A non-flag string containing
 #   whitespace is treated as a RAW launch command - the escape hatch for verifying
 #   new adapters. For pi and pi-signed, fm-spawn resolves the selected executable
@@ -1208,6 +1208,14 @@ launch_template() {
     # wrapper pins stealth/ox-alpha and a `--model` flag would be billed on
     # OpenRouter instead of routed free. Never add claude-ox there.
     claude-ox) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --ox --dangerously-skip-permissions __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+    # claude-zai: GLM-5.3 via the z.ai Anthropic-compatible endpoint (the paid
+    # token pack, captain 26.08.) - same family-variant pattern as claude-ox.
+    # The claude1 --zai wrapper pins glm-5.3[1m] AND --effort high (GLM knows
+    # only low/high/max; a store-level xhigh is rejected with 400/1210), so
+    # both __MODELFLAG__ and __EFFORTFLAG__ deliberately resolve to nothing:
+    # claude-zai is absent from model_flag_for_harness and
+    # effort_flag_for_harness below on purpose. Never add it there.
+    claude-zai) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --zai --dangerously-skip-permissions "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
     codex)
       if [ "$kind" = secondmate ]; then
         printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
@@ -1457,9 +1465,10 @@ model_flag_for_harness() {
   local harness=$1 model=$2
   [ -n "$model" ] && [ "$model" != default ] || return 0
   case "$harness" in
-    # claude-ox is deliberately absent: its wrapper pins stealth/ox-alpha, and
-    # a --model flag would be billed on OpenRouter instead of routed free
-    # (config/crew-dispatch.json rule 1). Never add it here.
+    # claude-ox and claude-zai are deliberately absent: their wrappers pin the
+    # provider model (stealth/ox-alpha resp. glm-5.3[1m]), and a --model flag
+    # would send a claude-* slug to the foreign provider - billed on OpenRouter,
+    # rejected on z.ai. Never add them here.
     claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
       printf -- '--model %s ' "$(shell_quote "$model")"
       ;;
@@ -1470,6 +1479,9 @@ effort_flag_for_harness() {
   local harness=$1 effort=$2
   [ -n "$effort" ] && [ "$effort" != default ] || return 0
   case "$harness" in
+    # claude-zai is deliberately absent: GLM-5.3 accepts only low/high/max
+    # (xhigh -> 400/1210), and the claude1 --zai wrapper already pins
+    # --effort high. A pass-through here would re-open that failure.
     claude|claude-ox)
       case "$effort" in
         low|medium|high|xhigh|max) printf -- '--effort %s ' "$(shell_quote "$effort")" ;;
@@ -2918,7 +2930,8 @@ esac
 # firstmate's own session happens to carry in CLAUDE_CONFIG_DIR is deliberately
 # not read - inheriting it is what launched a worker on the firstmate seat
 # against a pinned order. "-" means this harness runs on no Anthropic account,
-# or its own wrapper already exports the store (claude-ox), so no prefix.
+# or its own wrapper already exports the store (claude-ox, claude-zai), so no
+# prefix.
 if [ -n "$SPAWN_KONTO_DIR" ] && [ "$SPAWN_KONTO_DIR" != - ]; then
   LAUNCH="CLAUDE_CONFIG_DIR=$(shell_quote "$SPAWN_KONTO_DIR") $LAUNCH"
 fi

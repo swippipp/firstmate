@@ -149,8 +149,10 @@ if [ -z "$ALTE_ROLLE" ]; then
 fi
 fm_konten_rolle_bekannt "$ALTE_ROLLE" \
   || die "unknown --alte-rolle '$ALTE_ROLLE' - known: $FM_KONTEN_ROLLEN"
-[ "$ALTE_ROLLE" != "firstmate" ] \
-  || die "--alte-rolle firstmate would leave two seats - the firstmate seat is exclusive (O-0083); pass restverbrauch or offiziere-worker"
+case "$ALTE_ROLLE" in
+  firstmate|firstmate-offiziere)
+    die "--alte-rolle $ALTE_ROLLE would leave two seats - the firstmate seat is exclusive (O-0083/O-0112); pass restverbrauch or offiziere-worker" ;;
+esac
 
 if ! fm_konto_startfaehig "$ZIEL" "$FM_HOME"; then
   die "$ZIEL is not startable for $FM_HOME - open a session there once by hand ($ZIEL_WRAPPER in $FM_HOME), finish onboarding and accept the trust dialog, then rerun. Refusing to move the seat onto a storage that drops the session into the setup wizard."

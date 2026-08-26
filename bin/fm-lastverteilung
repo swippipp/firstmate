@@ -298,10 +298,12 @@ fi
 # O-0008 (23.08.2026): Die komplette Pruefkette laeuft auf Ox Alpha, solange es
 # kostenlos ist. Steht der Eintrag auf dem Ox-Wrapper, wird NICHT auf Konten
 # umgestellt; endet die Kostenlosigkeit, setzt Firstmate den Eintrag zurueck und
-# diese Weiche uebernimmt wieder.
-if [ "$IST_WRAPPER" = "$WRAPPER_DIR/claude-ox" ]; then
+# diese Weiche uebernimmt wieder. Gleiches gilt fuer claude-zai (GLM-5.3,
+# z.ai-Token-Pack, 26.08.): ein Fremdprovider-Eintrag wird nie still auf einen
+# Konto-Wrapper zurueckgeschrieben.
+if [ "$IST_WRAPPER" = "$WRAPPER_DIR/claude-ox" ] || [ "$IST_WRAPPER" = "$WRAPPER_DIR/claude-zai" ]; then
   echo "== Pruefpipeline"
-  echo "  laeuft auf Ox Alpha (claude-ox, O-0008) - Konto-Umstellung ausgesetzt"
+  echo "  laeuft auf Fremdprovider ($(basename "$IST_WRAPPER")) - Konto-Umstellung ausgesetzt"
   exit 0
 fi
 

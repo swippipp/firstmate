@@ -77,6 +77,34 @@ fi
 [ "$(run fm_firstmate_sitz)" = "konto-2" ] || fail "fm_firstmate_sitz must equal the firstmate row"
 ok "seat lookup answers from the ledger"
 
+# --- 2b. shared seat firstmate-offiziere (O-0112) --------------------------
+AKTE_GETEILT="$TMP/geteilt.tsv"
+{
+  printf 'konto-1\t$HOME/.claude1\ta@example.org\toffiziere-worker\tWorker\n'
+  printf 'konto-2\t$HOME/.claude2\tb@example.org\tfirstmate-offiziere\tgeteilter Sitz\n'
+} > "$AKTE_GETEILT"
+if [ "$(HOME="$H" FM_KONTEN_AKTE="$AKTE_GETEILT" "$LIB" fm_firstmate_sitz)" = "konto-2" ]; then
+  ok "fm_firstmate_sitz finds the shared firstmate-offiziere seat"
+else
+  fail "fm_firstmate_sitz must accept rolle firstmate-offiziere as the seat"
+fi
+[ "$(HOME="$H" FM_KONTEN_AKTE="$AKTE_GETEILT" "$LIB" fm_konto_fuer_rolle firstmate-offiziere)" = "konto-2" ] \
+  || fail "fm_konto_fuer_rolle must resolve firstmate-offiziere"
+
+# two seat-carrying rows are a ledger corruption, never a silent first-match
+AKTE_ZWEI_SITZE="$TMP/zwei-sitze.tsv"
+{
+  printf 'konto-2\t$HOME/.claude2\tb@example.org\tfirstmate\tSitz\n'
+  printf 'konto-3\t$HOME/.claude3\tc@example.org\tfirstmate-offiziere\tzweiter Sitz\n'
+} > "$AKTE_ZWEI_SITZE"
+out=$(HOME="$H" FM_KONTEN_AKTE="$AKTE_ZWEI_SITZE" "$LIB" fm_firstmate_sitz 2>&1)
+rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q "two firstmate seats"; then
+  ok "two seat-carrying rows abort 2 instead of steering to the first"
+else
+  fail "two firstmate seats must abort 2 (rc=$rc out=$out)"
+fi
+
 # first row wins when a role is held more than once
 AKTE_DOPPELT="$TMP/doppelt.tsv"
 {
@@ -207,10 +235,10 @@ if [ -f "$SHIPPED" ]; then
       || fail "shipped ledger: $s has no wrapper naming rule"
     r=$(FM_KONTEN_AKTE="$SHIPPED" "$LIB" fm_konto_rolle "$s") \
       || fail "shipped ledger: $s carries an unknown rolle"
-    [ "$r" = "firstmate" ] && firstmates=$((firstmates + 1))
+    case "$r" in firstmate|firstmate-offiziere) firstmates=$((firstmates + 1)) ;; esac
   done
   if [ "$firstmates" -eq 1 ]; then
-    ok "the shipped ledger has exactly one firstmate seat"
+    ok "the shipped ledger has exactly one firstmate seat (exclusive or shared, O-0112)"
   else
     fail "the shipped ledger must carry exactly one firstmate seat (found $firstmates)"
   fi

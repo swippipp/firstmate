@@ -475,6 +475,34 @@ test_claude_ox_threads_effort_but_never_model() {
   pass "claude-ox threads --effort onto the Ox wrapper and never emits --model"
 }
 
+# claude-zai is the claude family's GLM-5.3 launch profile (z.ai token pack,
+# O-0112). The wrapper pins glm-5.3[1m] AND --effort high, because GLM accepts
+# only low|high|max and a store-level xhigh is rejected with 400/1210 - so the
+# launch command must carry NEITHER --model NOR --effort.
+test_claude_zai_pins_wrapper_and_never_model_or_effort() {
+  local rec id out status launch
+  id=profile-claude-zai-z1
+  rec=$(make_spawn_case profile-claude-zai claude "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id" "$PROJ_DIR" --harness claude-zai --model sonnet --effort high)
+  status=$?
+  expect_code 0 "$status" "claude-zai spawn with profile flags should succeed"
+  assert_contains "$out" "spawned $id harness=claude-zai" "spawn did not report the claude-zai harness"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" claude-zai sonnet high
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "claude1 --zai --dangerously-skip-permissions" \
+    "claude-zai launch did not pin the claude1 --zai wrapper"
+  assert_not_contains "$launch" "--model" \
+    "claude-zai must never receive --model: the wrapper pins glm-5.3[1m] and a claude-* slug is rejected by z.ai"
+  assert_not_contains "$launch" "--effort" \
+    "claude-zai must never receive --effort: the wrapper pins high, and a passed xhigh would be rejected 400/1210"
+  assert_not_contains "$launch" "CLAUDE_CONFIG_DIR=" \
+    "claude-zai must get no store prefix: its wrapper exports the konto-1 store itself"
+  pass "claude-zai pins the wrapper and never emits --model or --effort"
+}
+
 test_codex_threads_model_and_effort() {
   local rec id out status launch
   id=profile-codex-z3
@@ -898,6 +926,7 @@ test_active_dispatch_profile_allows_positional_harness
 test_active_dispatch_profile_allows_raw_launch_command
 test_claude_threads_model_and_effort
 test_claude_ox_threads_effort_but_never_model
+test_claude_zai_pins_wrapper_and_never_model_or_effort
 test_codex_threads_model_and_effort
 test_codex_omits_invalid_max_effort
 test_grok_threads_model_and_reasoning_effort

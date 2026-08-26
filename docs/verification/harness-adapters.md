@@ -148,6 +148,17 @@ The distinct value exists only so a task's recorded `harness=` can name the Ox l
 
 Verification evidence: `tests/fm-control-relaunch.test.sh`'s `test_relaunch_moves_a_task_onto_ox_and_back_to_an_account` exercises both directions end to end against the fake session provider, and `tests/fm-spawn-dispatch-profile.test.sh`'s `test_claude_ox_threads_effort_but_never_model` pins the launch-command shape.
 
+### claude-zai (VERIFIED as a control-plane adapter value, 2026-08-26)
+
+`claude-zai` is the claude family's GLM-5.3 launch profile: the `claude1 --zai` wrapper routes to z.ai's Anthropic-compatible endpoint (`api.z.ai/api/anthropic`, paid 100M token pack, order O-0112). Same family-variant pattern as `claude-ox`; `fm_control_harness_family` folds it to `claude` via the `claude*` prefix rule, so everything under `claude` above applies unchanged.
+
+| Fact | Value |
+|---|---|
+| Launch | The `claude` launch shape with the `claude1 --zai` wrapper in place of the bare `claude` binary. The wrapper pins `glm-5.3[1m]` (1M context) on the konto-1 store. |
+| Model flag | Never emitted. `claude-zai` is deliberately absent from `model_flag_for_harness` - a `claude-*` slug would be rejected by z.ai. |
+| Effort flag | Never emitted. GLM-5.3 accepts only `low\|high\|max` (a store-level or passed `xhigh` is rejected with API error 400/1210, verified 2026-08-26 on the konto-3 store); the wrapper itself pins `--effort high`, and a caller-side `--effort` after it would win and re-open that failure. `claude-zai` is therefore absent from `effort_flag_for_harness` too. |
+| Acceptance evidence | Smoke test (`claude1 --zai -p` answered) plus a captain-mandated coding test 26.08.: GLM-5.3 implemented `merge_intervalle` against a pre-written 7-case unittest file; independent verifier run: `Ran 7 tests ... OK`, exit 0. |
+
 ## codex (VERIFIED 2026-06-11, codex-cli 0.139.0)
 
 | Fact | Value |

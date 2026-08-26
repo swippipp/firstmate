@@ -511,6 +511,31 @@ test_relaunch_moves_a_task_onto_ox_and_back_to_an_account() {
   pass "fm-control relaunch: an account task moves onto claude-ox and back onto an account through the same verb"
 }
 
+# claude-zai (GLM-5.3 via z.ai, O-0112) follows the same family-variant pattern
+# as claude-ox: relaunching onto it must succeed, pin the --zai wrapper, and
+# carry NEITHER --model NOR --effort (the wrapper pins glm-5.3[1m] and
+# --effort high; GLM rejects xhigh with 400/1210).
+test_relaunch_moves_a_task_onto_zai() {
+  local dir out rc
+  dir=$(new_case zaileg rl42)
+  add_ship_task "$dir" rl42 claude
+
+  printf 'claude-zai' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl42 relaunch --harness claude-zai \
+    --note "diverting onto the GLM pack while account quota is tight"); rc=$?
+  expect_code 0 "$rc" "relaunching an account task onto claude-zai should succeed"$'\n'"$out"
+  assert_contains "$out" "harness=claude-zai from=claude" "the outcome should name the account-to-zai transition"
+  [ "$(meta_field "$dir" rl42 harness)" = claude-zai ] \
+    || fail "the durable record should follow the switch onto claude-zai"
+  assert_grep "claude1 --zai --dangerously-skip-permissions" "$dir/fake/literal" \
+    "the replacement launch should be the zai wrapper"
+  assert_no_grep "--model" "$dir/fake/literal" \
+    "the zai leg must never receive --model: a claude-* slug is rejected by z.ai"
+  assert_no_grep "--effort" "$dir/fake/literal" \
+    "the zai leg must never receive --effort: the wrapper pins high, GLM rejects xhigh"
+  pass "fm-control relaunch: an account task moves onto claude-zai with the wrapper pinning model and effort"
+}
+
 test_harness_switch_resolves_a_prefixed_recorded_harness() {
   local dir out rc auth
   dir=$(new_case prefixcontrol rl32)
@@ -1385,6 +1410,7 @@ test_relaunch_requires_a_note_for_a_ship_task
 test_harness_switch_moves_the_record_and_clears_prior_wiring
 test_harness_switch_does_not_carry_the_old_profile_axes
 test_relaunch_moves_a_task_onto_ox_and_back_to_an_account
+test_relaunch_moves_a_task_onto_zai
 test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes

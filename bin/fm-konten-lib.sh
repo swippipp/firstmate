@@ -6,7 +6,9 @@
 #   fm_konto_pfad <speicher>              print CLAUDE_CONFIG_DIR of a storage
 #   fm_konto_rolle <speicher>             print its role
 #   fm_konto_fuer_rolle <rolle>           print the FIRST storage holding a role
-#   fm_firstmate_sitz                     print the storage holding `firstmate`
+#   fm_firstmate_sitz                     print the storage holding the seat
+#                                         (rolle `firstmate` or the shared
+#                                         `firstmate-offiziere`, O-0112)
 #   fm_konto_wrapper <speicher>           basis -> claude, konto-N -> claudeN
 #   fm_konto_startfaehig <speicher> <projektpfad>
 #                                         0 when a session can actually start
@@ -50,8 +52,11 @@ FM_KONTEN_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_KONTEN_LIB_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$FM_KONTEN_LIB_DIR/.." && pwd)}"
 
 # Closed set of roles; see the ledger header. Kept here so a typo in the file
-# is caught on read instead of steering a spawn.
-FM_KONTEN_ROLLEN="firstmate offiziere-worker restverbrauch captain-handbetrieb"
+# is caught on read instead of steering a spawn. firstmate-offiziere is the
+# shared seat (captain 26.08., O-0112): the firstmate AND secondmate spawns run
+# on it; workers still resolve to offiziere-worker. At most ONE row may carry a
+# firstmate* role - fm_firstmate_sitz aborts loud on two seats.
+FM_KONTEN_ROLLEN="firstmate firstmate-offiziere offiziere-worker restverbrauch captain-handbetrieb"
 
 fm_konten_warn() { printf 'fm-konten: %s\n' "$*" >&2; }
 
@@ -190,8 +195,34 @@ fm_konto_fuer_rolle() {
   return 1
 }
 
-# fm_firstmate_sitz: the storage holding the exclusive firstmate seat.
-fm_firstmate_sitz() { fm_konto_fuer_rolle firstmate; }
+# fm_firstmate_sitz: the storage holding the exclusive firstmate seat - the
+# row whose role is firstmate OR firstmate-offiziere (shared seat, O-0112).
+# Two seat-carrying rows are a ledger corruption and abort loud.
+fm_firstmate_sitz() {
+  local akte speicher pfad konto rolle bemerkung treffer=
+  akte="$(fm_konten_akte)"
+  if [ ! -f "$akte" ]; then
+    fm_konten_warn "ledger missing: $akte"
+    return 2
+  fi
+  while IFS=$'\t' read -r speicher pfad konto rolle bemerkung; do
+    case $speicher in ''|'#'*) continue ;; esac
+    case $rolle in
+      firstmate|firstmate-offiziere)
+        if [ -n "$treffer" ]; then
+          fm_konten_warn "two firstmate seats in $akte ($treffer and $speicher) - the seat is exclusive; fix the ledger"
+          return 2
+        fi
+        treffer=$speicher
+        ;;
+    esac
+  done < "$akte"
+  if [ -z "$treffer" ]; then
+    fm_konten_warn "no speicher carries rolle firstmate (or firstmate-offiziere) in $akte"
+    return 1
+  fi
+  printf '%s\n' "$treffer"
+}
 
 # fm_konto_wrapper <speicher>: the launcher name for that storage.
 fm_konto_wrapper() {

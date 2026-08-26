@@ -123,19 +123,24 @@ run_gate_spawn() {
 
 # write_order <home> <order-id> <wording> <enforce-tail>
 write_order() {
-  local home=$1 oid=$2 wording=$3 enforce=$4 dir
+  local home=$1 oid=$2 wording=$3 dir enforce
+  shift 3
   dir="$home/data/entscheide/2026-08-25"
   mkdir -p "$dir"
   # The gate reads only order-O-*.md exactly two levels under data/entscheide,
   # takes the header block before the first blank line, and quotes the first
-  # non-empty line under "## wording".
+  # non-empty line under "## wording". Every remaining argument becomes one
+  # enforce line (the field is repeatable; an allow line needs its deny sibling
+  # in the SAME order to have anything to lift).
   {
     printf 'id: %s\n' "$oid"
     printf 'type: order\n'
     printf 'status: active\n'
     printf 'source: captain\n'
     printf 'expires: -\n'
-    printf 'enforce: %s\n' "$enforce"
+    for enforce in "$@"; do
+      printf 'enforce: %s\n' "$enforce"
+    done
     printf '\n## wording (verbatim, original language)\n%s\n' "$wording"
   } > "$dir/order-$oid.md"
 }
@@ -159,6 +164,49 @@ test_forbidding_order_stops_the_spawn() {
   assert_contains "$out" "close O-0083" "refusal does not state the way out"
   assert_no_launch "$LAUNCH_LOG"
   pass "a forbidding captain order stops the spawn, quoted with its id and its way out"
+}
+
+# The spawn context carries klasse=<kind> since 26.08. (O-0112/O-0083
+# precision: account rules scoped per spawn class). A deny keyed on klasse can
+# only ever match when the gate actually delivers that key - this test is the
+# reader-side proof.
+test_order_klasse_reaches_the_gate() {
+  local rec id out status
+  id=gate-klasse-z1
+  rec=$(make_gate_case gate-klasse "$id")
+  read_gate_case "$rec"
+  write_order "$HOME_DIR" O-9101 \
+    'keine Schiffs-Starts bis zur Freigabe' \
+    'spawn klasse=ship'
+  touch "$HOME_DIR/state/.tor-order-scharf"
+
+  out=$(run_gate_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 1 "$status" "a klasse-scoped order must stop a matching ship spawn"
+  assert_contains "$out" "O-9101" "refusal does not name the klasse-scoped order"
+  assert_no_launch "$LAUNCH_LOG"
+  pass "the spawn gate delivers klasse= so class-scoped orders can bind"
+}
+
+# An allow entry in the SAME order lifts its deny for exactly the matching
+# class - the mechanism behind O-0083's secondmate allow on konto-2 (O-0112),
+# exercised here with the class this fixture can actually spawn.
+test_order_allow_lifts_for_matching_klasse() {
+  local rec id out status
+  id=gate-klasse-allow-z1
+  rec=$(make_gate_case gate-klasse-allow "$id")
+  read_gate_case "$rec"
+  write_order "$HOME_DIR" O-9102 \
+    'Konto 1 ist gesperrt, ausser fuer Schiffs-Starts' \
+    'spawn account=konto-1' \
+    'spawn allow account=konto-1 klasse=ship'
+  touch "$HOME_DIR/state/.tor-order-scharf"
+
+  out=$(run_gate_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "the order's own klasse allow must lift its account deny: $out"
+  [ -s "$LAUNCH_LOG" ] || fail "the allowed spawn never built its launch command"
+  pass "an order's own klasse-scoped allow lifts its account deny at the spawn gate"
 }
 
 test_live_reservation_stops_the_spawn() {
@@ -255,6 +303,8 @@ test_unarmed_gates_let_the_spawn_through() {
 }
 
 test_forbidding_order_stops_the_spawn
+test_order_klasse_reaches_the_gate
+test_order_allow_lifts_for_matching_klasse
 test_live_reservation_stops_the_spawn
 test_open_remark_on_the_task_stops_the_spawn
 test_ship_brief_without_acceptance_block_stops_the_spawn

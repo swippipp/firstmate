@@ -215,7 +215,7 @@ _anstoss_hash() {  # stdin -> hex digest
 # only. Unknown harness -> empty regex (no pane signal; see header).
 working_marker_regex() {  # <harness>
   case "$1" in
-    claude | claude-ox) printf '%s' 'esc to interrupt' ;;
+    claude | claude-ox | claude-zai) printf '%s' 'esc to interrupt' ;;
     grok) printf '%s' 'Ctrl\+c:cancel' ;;
     cursor) printf '%s' 'ctrl\+c to stop' ;;
     *) printf '' ;;

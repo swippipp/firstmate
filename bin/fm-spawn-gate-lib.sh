@@ -126,10 +126,10 @@ fm_spawn_konto_fuer_wrapper() {
 
 fm_spawn_konto_aufloesen() { # <kind> <harness> <konto-flag> <projektpfad>
   local kind=${1:-} harness=${2:-} konto_arg=${3:-} projekt=${4:-}
-  local akte speicher pfad prefix='-'
+  local akte speicher pfad prefix='-' pin_wrapper=
 
   case "$harness" in
-    claude|claude-ox) ;;
+    claude|claude-ox|claude-zai) ;;
     *)
       if [ -n "$konto_arg" ]; then
         echo "error: --konto names an Anthropic storage from config/konten.tsv and applies only to the claude harness family; harness '$harness' runs on no such account" >&2
@@ -149,20 +149,25 @@ fm_spawn_konto_aufloesen() { # <kind> <harness> <konto-flag> <projektpfad>
     return 1
   fi
 
-  if [ "$harness" = claude-ox ]; then
-    # The claude-ox launch template pins the wrapper `claude1`, which exports its
-    # own CLAUDE_CONFIG_DIR; resolve that wrapper back to its ledger row so the
-    # account is recorded and gate-checkable without a second, contradicting
-    # prefix on the launch.
-    if ! speicher=$(fm_spawn_konto_fuer_wrapper claude1); then
-      echo "error: spawn refused - no row in $akte carries the wrapper 'claude1', which the claude-ox launch pins." >&2
+  # Foreign-provider variants of the claude family pin a concrete wrapper in
+  # their launch template; resolve that wrapper back to its ledger row so the
+  # account is recorded and gate-checkable without a second, contradicting
+  # prefix on the launch. (claude-ox = OpenRouter Ox Alpha, claude-zai =
+  # z.ai GLM-5.3; both templates pin `claude1`.)
+  pin_wrapper=
+  case "$harness" in
+    claude-ox|claude-zai) pin_wrapper=claude1 ;;
+  esac
+  if [ -n "$pin_wrapper" ]; then
+    if ! speicher=$(fm_spawn_konto_fuer_wrapper "$pin_wrapper"); then
+      echo "error: spawn refused - no row in $akte carries the wrapper '$pin_wrapper', which the $harness launch pins." >&2
       echo "       Anweisung: add the konto-1 row to the ledger (or launch on --harness claude with an explicit --konto), then respawn." >&2
       fm_tor_log spawn konto-ox-wrapper rot - "kind=$kind harness=$harness"
       return 1
     fi
     if [ -n "$konto_arg" ] && [ "$konto_arg" != "$speicher" ]; then
-      echo "error: spawn refused - --konto $konto_arg contradicts claude-ox, whose wrapper 'claude1' pins $speicher; recording an account the launch does not use is worse than no record." >&2
-      echo "       Anweisung: drop --konto for claude-ox, or spawn --harness claude --konto $konto_arg." >&2
+      echo "error: spawn refused - --konto $konto_arg contradicts $harness, whose wrapper '$pin_wrapper' pins $speicher; recording an account the launch does not use is worse than no record." >&2
+      echo "       Anweisung: drop --konto for $harness, or spawn --harness claude --konto $konto_arg." >&2
       fm_tor_log spawn konto-ox-wrapper rot - "kind=$kind harness=$harness konto=$konto_arg"
       return 1
     fi
@@ -177,7 +182,11 @@ fm_spawn_konto_aufloesen() { # <kind> <harness> <konto-flag> <projektpfad>
   else
     # Every spawn this tool makes is a worker or an officer. The firstmate seat
     # is never taken by a spawn; it moves only through bin/fm-sitzwechsel.sh.
-    if ! speicher=$(fm_konto_fuer_rolle offiziere-worker); then
+    # Exception O-0112 (captain 26.08.): a SECONDMATE spawn prefers the shared
+    # firstmate-offiziere seat when the ledger carries one; workers never do.
+    if [ "$kind" = secondmate ] && speicher=$(fm_konto_fuer_rolle firstmate-offiziere 2>/dev/null); then
+      : # shared seat found - officers ride it (O-0112)
+    elif ! speicher=$(fm_konto_fuer_rolle offiziere-worker); then
       echo "error: spawn refused - no storage in $akte carries the role offiziere-worker, so this spawn has no seat." >&2
       echo "       Anweisung: give one row the role offiziere-worker (or pass --konto <speicher> for this one launch), then respawn." >&2
       fm_tor_log spawn konto-rolle rot - "kind=$kind harness=$harness rolle=offiziere-worker"
@@ -198,7 +207,7 @@ fm_spawn_konto_aufloesen() { # <kind> <harness> <konto-flag> <projektpfad>
     return 1
   fi
 
-  [ "$harness" = claude-ox ] || prefix=$pfad
+  [ -n "$pin_wrapper" ] || prefix=$pfad
   fm_tor_log spawn konto-startfaehig gruen - "kind=$kind harness=$harness konto=$speicher projekt=$projekt"
   printf '%s\t%s\n' "$speicher" "$prefix"
   return 0
@@ -258,6 +267,9 @@ fm_spawn_gates_check() { # task= project= kind= [account=] [brief=] [subject=]
     local octx=(spawn "task=$task")
     [ -z "$project" ] || octx+=("project=$project")
     [ -z "$account" ] || octx+=("account=$account")
+    # klasse carries the spawn kind (ship|scout|secondmate) so an order can
+    # scope its account rules per class (O-0083 allow for secondmates, O-0112).
+    [ -z "$kind" ] || octx+=("klasse=$kind")
     rc=0
     out=$(fm_order_gate_check "${octx[@]}") || rc=$?
     if [ "$rc" -eq 2 ]; then
