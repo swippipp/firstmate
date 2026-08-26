@@ -78,6 +78,7 @@ SH
 case "\${1:-} \${2:-}" in
   "pr view")
     case " \$* " in
+      *statusCheckRollup*) printf '{"state":"OPEN","headRefOid":"%s","statusCheckRollup":[{"name":"CI","status":"COMPLETED","conclusion":"SUCCESS"}]}\n' '$head' ; exit 0 ;;
       *headRefOid*) printf '%s\n' '$head' ; exit 0 ;;
     esac
     ;;
@@ -101,6 +102,13 @@ exit 0
 SH
   cat > "$case_dir/fakebin/gh" <<'SH'
 #!/usr/bin/env bash
+case "${1:-} ${2:-}" in
+  "pr view")
+    case " $* " in
+      *statusCheckRollup*) printf '{"state":"OPEN","headRefOid":"cafe1234","statusCheckRollup":[{"name":"CI","status":"COMPLETED","conclusion":"SUCCESS"}]}\n' ; exit 0 ;;
+    esac
+    ;;
+esac
 exit 0
 SH
   chmod +x "$case_dir/fakebin/gh-axi" "$case_dir/fakebin/gh"
@@ -250,6 +258,71 @@ test_records_pr_and_head_before_merging() {
   grep -qxF 'pr merge 9 --repo example/repo --squash' "$case_dir/gh-axi.log" \
     || fail "records-before-merge: gh-axi pr merge was not invoked with number, --repo, and default --squash"
   pass "fm-pr-merge records pr= and pr_head= before invoking gh-axi pr merge"
+}
+
+# L103/N3: kein Urteil ist nicht gruen - the GitHub leg refuses heads whose
+# checks never concluded green, refuses ZERO checks by default, and merges a
+# CI-less repo only through the loud named override.
+add_gh_mocks_rollup() { # case_dir rollup_json
+  local case_dir=$1 rollup=$2
+  cat > "$case_dir/fakebin/gh-axi" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FM_TEST_GH_AXI_LOG"
+exit 0
+SH
+  cat > "$case_dir/fakebin/gh" <<SH
+#!/usr/bin/env bash
+case "\${1:-} \${2:-}" in
+  "pr view")
+    case " \$* " in
+      *statusCheckRollup*) printf '%s\n' '{"state":"OPEN","headRefOid":"cafe1234","statusCheckRollup":$rollup}' ; exit 0 ;;
+      *headRefOid*) printf 'cafe1234\n' ; exit 0 ;;
+    esac
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/gh-axi" "$case_dir/fakebin/gh"
+}
+
+test_refuses_head_without_green_verdict() {
+  local case_dir rc
+  case_dir=$(make_case l103-not-acquired)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks_rollup "$case_dir" '[{"name":"CI","status":"QUEUED","conclusion":null}]'
+  : > "$case_dir/gh-axi.log"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/9 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "l103: a queued/never-acquired check must refuse the merge"
+  grep -q 'kein Urteil ist nicht gruen' "$case_dir/stderr" || { echo "--- stderr war:"; cat "$case_dir/stderr"; fail "l103: refusal must name the rule"; }
+  grep -q 'pr merge' "$case_dir/gh-axi.log" && fail "l103: gh-axi pr merge ran despite a non-green check"
+  pass "fm-pr-merge refuses a head whose checks never concluded green"
+}
+
+test_refuses_zero_checks_without_override() {
+  local case_dir rc
+  case_dir=$(make_case l103-zero-checks)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks_rollup "$case_dir" '[]'
+  : > "$case_dir/gh-axi.log"
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/9 \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+  expect_code 1 "$rc" "l103: zero checks must refuse by default"
+  assert_grep 'ZERO checks' "$case_dir/stderr" "l103: zero-check refusal must say so"
+  set +e
+  FM_PR_MERGE_OHNE_PRUEFUNGEN=1 run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/9 \
+    > "$case_dir/stdout2" 2> "$case_dir/stderr2"
+  rc=$?
+  set -e
+  expect_code 0 "$rc" "l103: the loud override must allow a CI-less repo to merge"
+  assert_grep 'OHNE_PRUEFUNGEN' "$case_dir/stderr2" "l103: the override merge must announce itself"
+  pass "fm-pr-merge refuses zero checks by default and merges only through the loud override"
 }
 
 test_merge_failure_propagates_after_recording() {
@@ -811,6 +884,8 @@ test_github_still_forwards_sha_arg() {
 }
 
 test_records_pr_and_head_before_merging
+test_refuses_head_without_green_verdict
+test_refuses_zero_checks_without_override
 test_merge_failure_propagates_after_recording
 test_extra_merge_args_forwarded
 test_missing_meta_refuses_before_merge

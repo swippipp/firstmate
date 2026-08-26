@@ -245,8 +245,54 @@ FIELDS
   FM_PR_MERGE_HEAD=$live_head
 }
 
+# L103/N3: "kein Urteil ist nicht gruen". The GitHub leg used to merge blind -
+# gh merges whatever branch protection allows, and these repos carry none, so
+# 26.08. two mains took heads whose CI was never acquired ("job was not
+# acquired by Runner") or never created (provider outage). This verifier makes
+# the default fail-closed: every check at the LIVE head must have concluded
+# green, and ZERO checks is a refusal, not a pass - a repo genuinely without CI
+# merges only through the loud, named override FM_PR_MERGE_OHNE_PRUEFUNGEN=1.
+github_verify_checks() {
+  local json state head n bad
+  json=$(gh pr view "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO" \
+    --json state,headRefOid,statusCheckRollup 2>/dev/null) || {
+    echo "error: refusing to merge - the PR's check state could not be read (gh pr view failed); a gate never guesses" >&2
+    return 1
+  }
+  state=$(printf '%s' "$json" | jq -r '.state // ""')
+  head=$(printf '%s' "$json" | jq -r '.headRefOid // ""')
+  n=$(printf '%s' "$json" | jq -r '.statusCheckRollup | length')
+  # A rollup item is a CheckRun (status/conclusion) or a StatusContext (state);
+  # anything not concluded SUCCESS/SKIPPED/NEUTRAL - pending, queued, never
+  # acquired, failed, or plain absent - counts red.
+  bad=$(printf '%s' "$json" | jq -r '[.statusCheckRollup[]
+    | select(((.conclusion // .state // "") | ascii_upcase) as $c
+             | ($c != "SUCCESS" and $c != "SKIPPED" and $c != "NEUTRAL"))
+    | ((.name // .context // "?") + "=" + ((.conclusion // .status // .state // "OHNE-URTEIL") | tostring))]
+    | join(", ")')
+  if [ "$state" != OPEN ]; then
+    echo "error: refusing to merge - PR state is \"${state:-unreadable}\", not OPEN" >&2
+    return 1
+  fi
+  if [ "$n" -eq 0 ]; then
+    if [ "${FM_PR_MERGE_OHNE_PRUEFUNGEN:-}" = 1 ]; then
+      echo "notice: merging WITHOUT any checks at head $head - FM_PR_MERGE_OHNE_PRUEFUNGEN=1 (repo without CI, loud opt-out)" >&2
+    else
+      echo "error: refusing to merge - the head $head carries ZERO checks (never created or not yet reported); kein Urteil ist nicht gruen (L103)." >&2
+      echo "       Ausweg: CI-Lauf am Kopf anstossen und gruen lesen, oder fuer ein Repo ohne CI mit FM_PR_MERGE_OHNE_PRUEFUNGEN=1 laut mergen." >&2
+      return 1
+    fi
+  elif [ -n "$bad" ]; then
+    echo "error: refusing to merge - checks at head $head without a green verdict: $bad" >&2
+    echo "       Ausweg: Laeufe abschliessen/re-runnen (gh run rerun), dann erneut mergen; kein Urteil ist nicht gruen (L103)." >&2
+    return 1
+  fi
+  printf 'verified: %s checks green at head %s\n' "$n" "$head" >&2
+}
+
 case "$PROVIDER" in
   github)
+    github_verify_checks || exit 1
     merge_args=()
     if ! caller_has_merge_method "$@"; then
       merge_args=(--squash)
