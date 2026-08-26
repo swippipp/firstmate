@@ -137,6 +137,15 @@ test_full_ship_brief_carries_every_v2_block() {
   assert_grep '- [A2] the captain surface renders unchanged :: beleg=klickbeleg' "$brief" \
     "acceptance point A2 does not match the format bin/fm-abnahme.sh parses"
 
+  # The scaffold teaches the exact verdict shape bin/fm-abnahme.sh greens on:
+  # the ASCII spellings a worker copies verbatim, plus the gelaufen-line
+  # requirement for beleg=testlauf evidence.
+  # shellcheck disable=SC2016  # fixed-string needle: the backticked template must match literally.
+  assert_grep '`A<n>: erfuellt|nicht-erfuellt|unklar - <evidence path under data/<task-id>/belege/ or reason>`' "$brief" \
+    "the scaffold does not teach the exact verdict spelling bin/fm-abnahme.sh accepts"
+  assert_grep 'gelaufen:' "$brief" \
+    "the scaffold omits the gelaufen-line requirement for beleg=testlauf evidence"
+
   # Hard cap, loudly: five lines survive verbatim, the sixth is dropped and said so.
   assert_grep '## No-Gos (woertlich aus der Produktgrundlage)' "$brief" "the no-go block is missing"
   assert_grep '- no silent fallback when identification fails' "$brief" "the fifth no-go line was dropped"

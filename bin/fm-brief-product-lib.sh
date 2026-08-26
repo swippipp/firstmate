@@ -240,6 +240,8 @@ fm_brief_abnahme_block() { # -> the acceptance block, or nothing
   done
   # shellcheck disable=SC2016  # literal brief text: the backticked A<n> line must reach the worker verbatim.
   printf 'Answer every point in data/<task-id>/report.md, one line each: `A<n>: erfuellt|nicht-erfuellt|unklar - <evidence path under data/<task-id>/belege/ or reason>`.\n'
+  # shellcheck disable=SC2016  # same verbatim contract: the gelaufen line is matched literally by bin/fm-abnahme.sh.
+  printf 'For beleg=testlauf points answered erfuellt, the evidence file must carry the literal line `gelaufen: <N> Tests, exit=<rc>`.\n'
   return 0
 }
 

@@ -12,13 +12,18 @@
 #     - [A<n>] <Kriterium> :: beleg=klickbeleg|testlauf|messung|diff|foto|sonstig
 #   A brief whose header carries the line "Captain-Flaeche: ja" (anywhere in
 #   the file, exact match) MUST carry at least one beleg=klickbeleg point.
-#   data/<task-id>/report.md (or --report <datei>) answers it, one line per
-#   brief point, no more, no less:
+#   data/<task-id>/report.md (or --report <datei>) answers it, one verdict
+#   line per brief point:
 #     A<n>: erfüllt|nicht-erfüllt|unklar - <Beleg-Pfad oder Grund>
-#   "erfüllt" requires an existing evidence file at
+#   Both spellings are one verdict: the umlauted form above and its
+#   transliterated shape ("erfuellt", "nicht-erfuellt") both match, because
+#   the brief scaffold teaches the ASCII form and raw bytes get mangled in
+#   transit. "erfüllt" requires an existing evidence file at
 #   data/<task-id>/belege/<relativer Pfad aus der Zeile>. "unklar - <Grund>"
 #   and "nicht-erfüllt - <Grund>" need no evidence and are fully valid
-#   verdicts. Any other line shape is prose, not a verdict, and is rejected.
+#   verdicts. A line that opens "A<n>:" but carries any other shape is a
+#   deformed verdict for a named point and is rejected; every other line
+#   (headings, prose) is not a verdict attempt and is ignored.
 #
 # Art-Prüfung (evidence must match its declared kind): beleg=testlauf needs a
 # line "gelaufen: <n> Tests, exit=<rc>" inside the evidence file (or, for a
@@ -283,8 +288,11 @@ cmd_check_report() {
 
   while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || continue
-    if [[ "$line" =~ ^A([0-9]+):\ (erfüllt|nicht-erfüllt|unklar)\ -\ (.+)$ ]]; then
+    if [[ "$line" =~ ^A([0-9]+):\ (erfüllt|erfuellt|nicht-erfüllt|nicht-erfuellt|unklar)\ -\ (.+)$ ]]; then
       n="${BASH_REMATCH[1]}"; urteil="${BASH_REMATCH[2]}"; rest="${BASH_REMATCH[3]}"
+      # Both spellings are one verdict; normalize to the ASCII form so the
+      # case below carries a single shape per judgment.
+      urteil="${urteil//ä/ae}"; urteil="${urteil//ö/oe}"; urteil="${urteil//ü/ue}"; urteil="${urteil//ß/ss}"
       if [ -z "${POINT_ART[$n]+x}" ]; then
         echo "ABNAHME-TOR ROT: Urteilszeile für A$n hat keine Entsprechung im Brief '$brief': \"$line\"" >&2
         echo "Ausweg: die Zeile entfernen, oder Punkt A$n im Brief ergänzen." >&2
@@ -304,10 +312,10 @@ cmd_check_report() {
         unklar)
           fm_tor_log "$TOR" punkt-urteil gruen - "task=$task punkt=A$n urteil=unklar"
           ;;
-        nicht-erfüllt)
+        nicht-erfuellt)
           fm_tor_log "$TOR" punkt-urteil gruen - "task=$task punkt=A$n urteil=nicht-erfuellt"
           ;;
-        erfüllt)
+        erfuellt)
           if judge_erfuellt "$task" "$n" "$rest" "$belege"; then
             jrc=0
           else
@@ -319,12 +327,13 @@ cmd_check_report() {
           esac
           ;;
       esac
-    else
-      echo "ABNAHME-TOR ROT: Prosa statt Urteilszeile im Bericht '$report': \"$line\"" >&2
-      echo "Ausweg: Zeile im Format 'A<n>: erfüllt|nicht-erfüllt|unklar - <Beleg-Pfad oder Grund>' schreiben." >&2
-      fm_tor_log "$TOR" prosa rot format-korrigieren "task=$task report=$report"
+    elif [[ "$line" =~ ^A[0-9]+: ]]; then
+      echo "ABNAHME-TOR ROT: verformte Urteilszeile im Bericht '$report': \"$line\"" >&2
+      echo "Ausweg: Zeile im Format 'A<n>: erfuellt|erfüllt|nicht-erfuellt|nicht-erfüllt|unklar - <Beleg-Pfad oder Grund>' schreiben." >&2
+      fm_tor_log "$TOR" urteil-unlesbar rot format-korrigieren "task=$task report=$report"
       worst=rot
     fi
+    # Alles andere (Ueberschriften, Prosa) ist kein Urteilsversuch und wird ignoriert.
   done < "$report"
 
   while IFS= read -r n; do
