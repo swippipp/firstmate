@@ -87,15 +87,45 @@ def lies_holds(heim: Path, heute: dt.date) -> list[dict]:
     return posten
 
 
+AKTE = "data/paketplan-2026-08-26"
+KOPF_MUSTER = [  # (datei, regex, id-schablone)
+    ("paketplan.md", re.compile(r"^## ((?:P|W)\d+) — (.*)$"), "{0}"),
+    ("heim1-pakete.md", re.compile(r"^## Paket (\d+) — (.*)$"), "H1-P{0}"),
+    ("heim2-pakete.md", re.compile(r"^## P(\d+) — (.*)$"), "H2-P{0}"),
+    ("heim3-pakete.md", re.compile(r"^## Paket (\d+) — (.*)$"), "H3-P{0}"),
+    ("heim4-pakete.md", re.compile(r"^## Paket ([A-Z]) — (.*)$"), "H4-{0}"),
+]
+SAEUBERN = re.compile(r"\*\(.*?\)\*|\(Repo:.*?\)|\(repo:.*?\)|[„“\"]")
+
+
+def lies_beschreibungen(heim: Path) -> dict[str, str]:
+    """paket-id -> Einzeiler aus den Abschnitts-Ueberschriften der O-0122-Akte."""
+    b: dict[str, str] = {"brett-flaeche-holds":
+                         "Captain-Holds-Flaeche am Brett (A2-Paket aus O-0135)"}
+    for datei, rx, schablone in KOPF_MUSTER:
+        pfad = heim / AKTE / datei
+        if not pfad.is_file():
+            continue
+        for zeile in pfad.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = rx.match(zeile)
+            if not m:
+                continue
+            text = SAEUBERN.sub("", m.group(2)).strip(" -—·\t")
+            b.setdefault(schablone.format(m.group(1)), text[:110])
+    return b
+
+
 def lies_rangliste(heim: Path) -> list[dict]:
     tsv = heim / "data" / "wette" / "rangliste.tsv"
+    beschreibungen = lies_beschreibungen(heim)
     posten = []
     for zeile in tsv.read_text(encoding="utf-8").splitlines():
         if zeile.startswith("#") or not zeile.strip():
             continue
         teile = zeile.split("\t")
         if len(teile) >= 3:
-            posten.append({"rang": int(teile[0]), "paket": teile[1], "heim": teile[2]})
+            posten.append({"rang": int(teile[0]), "paket": teile[1], "heim": teile[2],
+                           "beschreibung": beschreibungen.get(teile[1], "")})
     return posten
 
 
