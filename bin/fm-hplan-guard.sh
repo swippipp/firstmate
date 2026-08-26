@@ -93,8 +93,12 @@
 #   HPLAN_GUARD_SSH_CMD        word-split command prefix, default
 #                              "ssh -o ConnectTimeout=10 -o BatchMode=yes"
 #   HPLAN_GUARD_REMOTE_HOST    default gex
-#   HPLAN_GUARD_REMOTE_ROOTS   colon list, default the hplan Docker volume
+#   HPLAN_GUARD_REMOTE_ROOTS   colon list; since H4-H the defaults are the hplan
+#                              Docker volume, the source tree on the target,
+#                              and /tmp on the target:
 #                              /var/lib/docker/volumes/hplan_hplan-daten/_data
+#                              /opt/hplan/quelle
+#                              /tmp
 #   HPLAN_GUARD_REMOTE_EXCLUDE colon list, default /root/backups/hplan
 #   HPLAN_GUARD_RE_NAG_SECS    re-report an unchanged finding or partial after
 #                              this many seconds, default 86400; 0 = every sweep
@@ -195,7 +199,13 @@ resolve_config() {
   esac
   SSH_CMD=${HPLAN_GUARD_SSH_CMD:-'ssh -o ConnectTimeout=10 -o BatchMode=yes'}
   REMOTE_HOST=${HPLAN_GUARD_REMOTE_HOST:-gex}
-  REMOTE_ROOTS=${HPLAN_GUARD_REMOTE_ROOTS:-/var/lib/docker/volumes/hplan_hplan-daten/_data}
+  # Same family, three places (H4-H, 26.08.2026): the volume was the only
+  # root the guard saw, yet the source tree on the target leaked world-readable
+  # twice through the rollout path and a /tmp bundle of the same signature
+  # surfaced twice more - all four cases sat outside one narrow default. A
+  # wider default keeps the shim trust binding intact: no extra file, no env
+  # for operators to forget.
+  REMOTE_ROOTS=${HPLAN_GUARD_REMOTE_ROOTS:-/var/lib/docker/volumes/hplan_hplan-daten/_data:/opt/hplan/quelle:/tmp}
   REMOTE_EXCLUDE=${HPLAN_GUARD_REMOTE_EXCLUDE:-/root/backups/hplan}
 
   # Explicit scopes replace the default plan: the contract for tests and
