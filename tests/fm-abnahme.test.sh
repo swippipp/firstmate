@@ -7,8 +7,9 @@
 #   1. check-brief: rot without a wellformed A-point, rot on missing brief,
 #      rot when Captain-Flaeche: ja lacks a klickbeleg point, gruen otherwise.
 #   2. check-report: rot on a missing report, rot on a missing judgment line,
-#      rot on prose instead of a verdict, rot on an unknown A-number, rot on
-#      a duplicate judgment line.
+#      headings and prose ignored rather than reported rot, rot on a deformed
+#      A<n>: line, rot on an unknown A-number, rot on a duplicate judgment
+#      line.
 #   3. Verdicts: 'unklar - <Grund>' and 'nicht-erfüllt - <Grund>' are gruen
 #      with no evidence needed; 'erfüllt' needs an existing beleg file (rot
 #      if missing).
@@ -17,6 +18,10 @@
 #   5. --legacy: a brief without an Abnahme block prints the LEGACY line and
 #      exits 3 (gelb), never green; once state/.abnahme-legacy-verfall names
 #      a past UTC date, the same call turns rot.
+#   6. Schreibweisen: 'erfuellt'/'nicht-erfuellt' and 'erfüllt'/
+#      'nicht-erfüllt' are one verdict each way - and tolerance never loosens
+#      the substance checks (missing beleg file stays rot, missing gelaufen
+#      line stays gelb).
 #
 # Isolation: everything runs against a throwaway FM_HOME (state/, data/);
 # nothing touches the real fleet.
@@ -154,16 +159,38 @@ else
   fail "check-report must refuse rot on a missing judgment line (rc=$rc out=$out)"
 fi
 
+# Headings and prose are not verdict attempts: a report that answers every
+# point passes with its narrative around the lines.
 cat > "$HOME_A/data/r1/report.md" <<'EOF'
+## Bericht
+
+Erst ein Absatz Prosa ueber den Verlauf, dann die Urteile.
+
 A1: unklar - noch offen
-Wir denken A2 ist erledigt, sieht gut aus.
+
+Notizen zwischen den Urteilen, mit Bindestrich - aber keine Urteilszeile.
+A2: unklar - noch offen
 EOF
 out=$(FM_HOME="$HOME_A" "$BIN" check-report r1 2>&1)
 rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "Prosa"; then
-  ok "check-report refuses rot on a prose line where a verdict belongs"
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^GRUEN:"; then
+  ok "check-report ignores headings and prose instead of reporting them rot"
 else
-  fail "check-report must refuse rot on prose (rc=$rc out=$out)"
+  fail "check-report must ignore non-verdict lines (rc=$rc out=$out)"
+fi
+
+# Sharpness stays: a line that OPENS like a verdict but carries another shape
+# is a deformed verdict for a named point, not ignorable prose.
+cat > "$HOME_A/data/r1/report.md" <<'EOF'
+A1: unklar - noch offen
+A2: passt schon
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report r1 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "Urteilszeile"; then
+  ok "a deformed A<n>: line stays rot even though plain prose is ignored"
+else
+  fail "a deformed A<n>: line must stay rot (rc=$rc out=$out)"
 fi
 
 cat > "$HOME_A/data/r1/report.md" <<'EOF'
@@ -290,6 +317,80 @@ else
 fi
 
 rm -f "$HOME_A/state/.abnahme-legacy-verfall"
+
+# --- 6. Schreibweisen: transliterated and umlauted are one verdict ----------
+# The brief scaffold teaches the ASCII form (bin/fm-brief-product-lib.sh), so a
+# worker following its brief verbatim must not be failed by the TOR for it.
+fresh_task sw1
+cat > "$HOME_A/data/sw1/brief.md" <<'EOF'
+## Abnahme (maschinenlesbar)
+- [A1] Login klappt :: beleg=klickbeleg
+- [A2] Tests laufen :: beleg=testlauf
+EOF
+touch "$HOME_A/data/sw1/belege/klick.png"
+printf 'irgendein inhalt ohne laufzeile\n' > "$HOME_A/data/sw1/belege/lauf.txt"
+
+cat > "$HOME_A/data/sw1/report.md" <<'EOF'
+A1: erfuellt - klick.png
+A2: erfuellt - lauf.txt
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report sw1 2>&1)
+rc=$?
+if [ "$rc" -eq 3 ] && printf '%s' "$out" | grep -qi "gelaufen:"; then
+  ok "transliterated 'erfuellt' does not bypass the testlauf Art-Prüfung (gelb without the gelaufen line)"
+else
+  fail "transliterated 'erfuellt' on gelaufen-less testlauf evidence must stay gelb (rc=$rc out=$out)"
+fi
+
+echo "gelaufen: 3 Tests, exit=0" > "$HOME_A/data/sw1/belege/lauf.txt"
+
+cat > "$HOME_A/data/sw1/report.md" <<'EOF'
+A1: erfuellt - klick.png
+A2: erfuellt - lauf.txt
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report sw1 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^GRUEN:"; then
+  ok "transliterated 'erfuellt' verdict lines are gruen when the evidence exists"
+else
+  fail "transliterated 'erfuellt' must be gruen with existing evidence (rc=$rc out=$out)"
+fi
+
+cat > "$HOME_A/data/sw1/report.md" <<'EOF'
+A1: erfüllt - klick.png
+A2: erfüllt - lauf.txt
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report sw1 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^GRUEN:"; then
+  ok "umlauted 'erfüllt' verdict lines keep passing alongside the new spelling"
+else
+  fail "umlauted 'erfüllt' must still be gruen (rc=$rc out=$out)"
+fi
+
+cat > "$HOME_A/data/sw1/report.md" <<'EOF'
+A1: erfuellt - fehlt.png
+A2: unklar - noch offen
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report sw1 2>&1)
+rc=$?
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "Beleg-Datei fehlt"; then
+  ok "spelling tolerance never loosens substance: 'erfuellt' without a beleg file stays rot"
+else
+  fail "transliterated 'erfuellt' with a missing beleg file must stay rot (rc=$rc out=$out)"
+fi
+
+cat > "$HOME_A/data/sw1/report.md" <<'EOF'
+A1: nicht-erfuellt - kaputt
+A2: nicht-erfuellt - offen geblieben
+EOF
+out=$(FM_HOME="$HOME_A" "$BIN" check-report sw1 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "^GRUEN:"; then
+  ok "'nicht-erfuellt' is accepted as the umlauted form's twin, reason instead of evidence"
+else
+  fail "transliterated 'nicht-erfuellt' must be gruen without evidence (rc=$rc out=$out)"
+fi
 
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS failure(s)" >&2
