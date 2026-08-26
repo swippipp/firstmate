@@ -1211,7 +1211,7 @@ launch_template() {
     # claude-zai: GLM via the z.ai Anthropic-compatible endpoint (Team-Plan
     # seats + pack fallback, O-0114/O-0116) - same family-variant pattern as
     # claude-ox, but model AND effort thread through (captain 26.08.): the
-    # wrapper maps aliases onto plan models (haiku -> glm-5-turbo, the rest ->
+    # wrapper maps aliases onto plan models (sonnet/haiku -> glm-4.7, opus/fable ->
     # glm-5.3[1m]) and pins --effort high only when no effort flag arrives.
     claude-zai) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --zai --dangerously-skip-permissions __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
     codex)
@@ -1466,7 +1466,7 @@ model_flag_for_harness() {
     # claude-ox is deliberately absent: its wrapper pins stealth/ox-alpha and a
     # --model flag would be billed on OpenRouter. claude-zai DOES thread the
     # model (captain 26.08., measured): the wrapper maps the aliases onto plan
-    # models (haiku -> glm-5-turbo, sonnet/opus/fable -> glm-5.3[1m]), so a
+    # glm-5.3[1m]; glm-5.2 is served as 5.3, glm-5-turbo hangs), so a
     # dispatch class reaches the right GLM tier; raw glm-* slugs pass through.
     claude|claude-zai|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
       printf -- '--model %s ' "$(shell_quote "$model")"
