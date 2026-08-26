@@ -188,6 +188,70 @@ printf '%s\n' "$bad_out" | grep -qi "unknown Captain-Klasse" || fail "the abort 
 ok "an unknown class name in a mandate file aborts loudly instead of a silent fallback"
 rm -f "$FLAG"
 
+# --- 7b. a comment INSIDE the section must not blind the match (PR 161) ------
+# Vorfall SnackSuite 26.08.: die Klasse stand unter einer Kommentarzeile IM
+# Abschnitt; der alte Parser beendete den Abschnitt an jedem '#' und der echte
+# PR-161-Treffer lief still durch. Klassen ober- UND unterhalb des Kommentars
+# muessen treffen; ein unbeteiligter Diff bleibt frei.
+REPO_G="$HOME_A/projects/commentrepo"
+init_repo "$REPO_G"
+cat > "$REPO_G/MANDAT.md" <<'EOF'
+# MANDAT - Vorspann voller Kommentare, wie in den echten Uebergangsakten
+
+# Captain-Klassen
+geld: payments/*
+# erklaerende Kommentarzeile mitten im Abschnitt
+sicherheit: auth/*
+destruktiv: scripts/wipe-*
+EOF
+gitc -C "$REPO_G" add MANDAT.md
+gitc -C "$REPO_G" commit -qm "add commented MANDAT.md"
+add_files_on_branch "$REPO_G" feature-auth auth/login.ts
+add_files_on_branch "$REPO_G" feature-wipe scripts/wipe-db.sh
+add_files_on_branch "$REPO_G" feature-clean src/util.ts
+printf 'armed\n' > "$FLAG"
+
+out_g=$(FM_HOME="$HOME_A" "$SCRIPT" commentrepo feature-auth 2>/dev/null)
+rc_g=$?
+[ "$rc_g" -eq 3 ] || fail "hit on a class BELOW a mid-section comment must refuse (got $rc_g)"
+printf '%s\n' "$out_g" | grep -q '^sicherheit	auth/\*	auth/login.ts$' \
+  || fail "the below-comment class must produce its exact hit row"
+
+out_g2=$(FM_HOME="$HOME_A" "$SCRIPT" commentrepo feature-wipe 2>/dev/null)
+rc_g2=$?
+[ "$rc_g2" -eq 3 ] || fail "hit on a class ABOVE the comment must still refuse (got $rc_g2)"
+printf '%s\n' "$out_g2" | grep -q '^destruktiv	scripts/wipe-\*	scripts/wipe-db.sh$' \
+  || fail "the above-comment class must still hit"
+
+out_clean=$(FM_HOME="$HOME_A" "$SCRIPT" commentrepo feature-clean 2>&1)
+rc_clean=$?
+[ "$rc_clean" -eq 0 ] || fail "uninvolved diff on a commented mandate must stay frei (got $rc_clean, out: $out_clean)"
+[ -z "$out_clean" ] || fail "frei verdict on a commented mandate must stay silent (got: $out_clean)"
+
+ok "mid-section comments no longer end the section: hits above AND below them hold, the uninvolved diff stays frei"
+
+# --- 7c. junk inside the section aborts loudly (typo'd class line) ----------
+# A mistyped class line ('klasse : muster', space before the colon) matches
+# neither the class regex nor the comment rule; silently ignoring it would
+# widen the free path by one captain-class boundary exactly like PR 161 did.
+REPO_H="$HOME_A/projects/junkrepo"
+init_repo "$REPO_H"
+cat > "$REPO_H/MANDAT.md" <<'EOF'
+# Captain-Klassen
+geld: payments/*
+nutzerdaten : users/*
+EOF
+gitc -C "$REPO_H" add MANDAT.md
+gitc -C "$REPO_H" commit -qm "add typo'd MANDAT.md"
+add_files_on_branch "$REPO_H" feature-any src/util.ts
+printf 'armed\n' > "$FLAG"
+junk_out=$(FM_HOME="$HOME_A" "$SCRIPT" junkrepo feature-any 2>&1)
+junk_rc=$?
+[ "$junk_rc" -ne 0 ] && [ "$junk_rc" -ne 3 ] || fail "a typo'd class line must abort as a usage error, not a tor verdict (got $junk_rc)"
+printf '%s\n' "$junk_out" | grep -qF "unparsable line" || fail "the abort must name the unparsable line, not pass silently"
+ok "a typo'd class line inside the section aborts loudly instead of widening the free path"
+rm -f "$FLAG"
+
 # --- 8. sweep marking: an inventour run is marked in its kontext rows --------
 # Befund 1d: HEAD-range sweeps across repos are refusals-without-actor; they
 # must carry "sweep=1" as their first kontext token so fm-streichliste.sh can

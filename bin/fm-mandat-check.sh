@@ -21,8 +21,11 @@
 # MANDAT-FILE FORMAT (this TOR is Ein-Eigner of this format):
 #   A section headed by the exact line "# Captain-Klassen", followed by one
 #   line per class: "<klasse>: <glob1>, <glob2>, ..." - comma-separated glob
-#   patterns, whitespace around each pattern trimmed. The section ends at the
-#   next line starting with "#" or at EOF. Valid classes (fixed, closed set):
+#   patterns, whitespace around each pattern trimmed. The section runs to EOF;
+#   '#'-comment lines and blank lines INSIDE it are skipped, not an end (a
+#   mid-section comment once left every later class unread and the TOR blind:
+#   SnackSuite PR 161). Any other non-class line inside is a format error and
+#   aborts loudly. Valid classes (fixed, closed set):
 #     geld nutzerdaten sicherheit oeffentlich vision destruktiv
 #   Any other class name in the file is a format error and aborts loudly
 #   (L33: unknown value = abort, never a silent fallback) - never silently
@@ -104,7 +107,7 @@ else
   fm_tor_log() { :; }
 fi
 
-usage() { sed -n '2,39p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "error: $*" >&2; exit 2; }
 
 # Sweep marking (Befund 1d): an inventory that judges whole histories across
@@ -169,8 +172,9 @@ parse_mandat() {
       continue
     fi
     case "$line" in
-      '#'*) insec=0; continue ;;
+      '#'*) continue ;;   # comment inside the section, not its end (PR 161)
     esac
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
     if [[ "$line" =~ ^([a-z]+):[[:space:]]*(.*)$ ]]; then
       klasse="${BASH_REMATCH[1]}"
       rest="${BASH_REMATCH[2]}"
@@ -182,6 +186,8 @@ parse_mandat() {
         K_LIST+=("$klasse")
         P_LIST+=("$pat")
       done
+    else
+      die "unparsable line in the 'Captain-Klassen' section of $file: '$line' (a typo'd class line would otherwise silently widen the free path)"
     fi
   done < "$file"
 }
