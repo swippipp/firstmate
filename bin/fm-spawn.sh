@@ -1208,14 +1208,12 @@ launch_template() {
     # wrapper pins stealth/ox-alpha and a `--model` flag would be billed on
     # OpenRouter instead of routed free. Never add claude-ox there.
     claude-ox) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --ox --dangerously-skip-permissions __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
-    # claude-zai: GLM-5.3 via the z.ai Anthropic-compatible endpoint (the paid
-    # token pack, captain 26.08.) - same family-variant pattern as claude-ox.
-    # The claude1 --zai wrapper pins glm-5.3[1m] AND --effort high (GLM knows
-    # only low/high/max; a store-level xhigh is rejected with 400/1210), so
-    # both __MODELFLAG__ and __EFFORTFLAG__ deliberately resolve to nothing:
-    # claude-zai is absent from model_flag_for_harness and
-    # effort_flag_for_harness below on purpose. Never add it there.
-    claude-zai) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --zai --dangerously-skip-permissions "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+    # claude-zai: GLM via the z.ai Anthropic-compatible endpoint (Team-Plan
+    # seats + pack fallback, O-0114/O-0116) - same family-variant pattern as
+    # claude-ox, but model AND effort thread through (captain 26.08.): the
+    # wrapper maps aliases onto plan models (haiku -> glm-5-turbo, the rest ->
+    # glm-5.3[1m]) and pins --effort high only when no effort flag arrives.
+    claude-zai) printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false claude1 --zai --dangerously-skip-permissions __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
     codex)
       if [ "$kind" = secondmate ]; then
         printf '%s' 'codex __MODELFLAG____EFFORTFLAG__--dangerously-bypass-approvals-and-sandbox "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
@@ -1465,11 +1463,12 @@ model_flag_for_harness() {
   local harness=$1 model=$2
   [ -n "$model" ] && [ "$model" != default ] || return 0
   case "$harness" in
-    # claude-ox and claude-zai are deliberately absent: their wrappers pin the
-    # provider model (stealth/ox-alpha resp. glm-5.3[1m]), and a --model flag
-    # would send a claude-* slug to the foreign provider - billed on OpenRouter,
-    # rejected on z.ai. Never add them here.
-    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
+    # claude-ox is deliberately absent: its wrapper pins stealth/ox-alpha and a
+    # --model flag would be billed on OpenRouter. claude-zai DOES thread the
+    # model (captain 26.08., measured): the wrapper maps the aliases onto plan
+    # models (haiku -> glm-5-turbo, sonnet/opus/fable -> glm-5.3[1m]), so a
+    # dispatch class reaches the right GLM tier; raw glm-* slugs pass through.
+    claude|claude-zai|codex|opencode|pi|pi-signed|grok|kimi|cursor|muse)
       printf -- '--model %s ' "$(shell_quote "$model")"
       ;;
   esac
@@ -1479,10 +1478,11 @@ effort_flag_for_harness() {
   local harness=$1 effort=$2
   [ -n "$effort" ] && [ "$effort" != default ] || return 0
   case "$harness" in
-    # claude-zai is deliberately absent: GLM-5.3 accepts only low/high/max
-    # (xhigh -> 400/1210), and the claude1 --zai wrapper already pins
-    # --effort high. A pass-through here would re-open that failure.
-    claude|claude-ox)
+    # claude-zai threads effort like the rest of the family (captain 26.08.,
+    # measured: every tier incl. xhigh answers via the CLI flag - the historic
+    # 400/1210 came from a store-level settings effortLevel, which any CLI
+    # flag overrides; the wrapper pins --effort high only when no flag comes).
+    claude|claude-ox|claude-zai)
       case "$effort" in
         low|medium|high|xhigh|max) printf -- '--effort %s ' "$(shell_quote "$effort")" ;;
       esac

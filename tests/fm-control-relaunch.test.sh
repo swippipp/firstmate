@@ -511,29 +511,26 @@ test_relaunch_moves_a_task_onto_ox_and_back_to_an_account() {
   pass "fm-control relaunch: an account task moves onto claude-ox and back onto an account through the same verb"
 }
 
-# claude-zai (GLM-5.3 via z.ai, O-0112) follows the same family-variant pattern
-# as claude-ox: relaunching onto it must succeed, pin the --zai wrapper, and
-# carry NEITHER --model NOR --effort (the wrapper pins glm-5.3[1m] and
-# --effort high; GLM rejects xhigh with 400/1210).
+# claude-zai (GLM via z.ai Team-Plan, O-0114/O-0116) follows the same
+# family-variant pattern as claude-ox, but model and effort THREAD (captain
+# 26.08., measured): aliases map onto plan models inside the wrapper.
 test_relaunch_moves_a_task_onto_zai() {
   local dir out rc
   dir=$(new_case zaileg rl42)
   add_ship_task "$dir" rl42 claude
 
   printf 'claude-zai' > "$dir/fake/becomes"
-  out=$(run_control "$dir" rl42 relaunch --harness claude-zai \
-    --note "diverting onto the GLM pack while account quota is tight"); rc=$?
+  out=$(run_control "$dir" rl42 relaunch --harness claude-zai --effort high \
+    --note "diverting onto the GLM plan while account quota is tight"); rc=$?
   expect_code 0 "$rc" "relaunching an account task onto claude-zai should succeed"$'\n'"$out"
   assert_contains "$out" "harness=claude-zai from=claude" "the outcome should name the account-to-zai transition"
   [ "$(meta_field "$dir" rl42 harness)" = claude-zai ] \
     || fail "the durable record should follow the switch onto claude-zai"
-  assert_grep "claude1 --zai --dangerously-skip-permissions" "$dir/fake/literal" \
-    "the replacement launch should be the zai wrapper"
+  assert_grep "claude1 --zai --dangerously-skip-permissions --effort 'high'" "$dir/fake/literal" \
+    "the replacement launch should thread the effort flag onto the zai wrapper"
   assert_no_grep "--model" "$dir/fake/literal" \
-    "the zai leg must never receive --model: a claude-* slug is rejected by z.ai"
-  assert_no_grep "--effort" "$dir/fake/literal" \
-    "the zai leg must never receive --effort: the wrapper pins high, GLM rejects xhigh"
-  pass "fm-control relaunch: an account task moves onto claude-zai with the wrapper pinning model and effort"
+    "no model was requested here, so none may be invented on the launch"
+  pass "fm-control relaunch: an account task moves onto claude-zai and threads the requested effort"
 }
 
 test_harness_switch_resolves_a_prefixed_recorded_harness() {

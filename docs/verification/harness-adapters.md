@@ -156,9 +156,10 @@ Since O-0114 the wrapper resolves its own SEAT through `bin/fm-zai-sitz` (single
 
 | Fact | Value |
 |---|---|
-| Launch | The `claude` launch shape with the `claude1 --zai` wrapper in place of the bare `claude` binary. The wrapper pins `glm-5.3[1m]` (1M context; Haiku/small-fast alias `glm-5-turbo`) on the konto-1 store and resolves its seat via `bin/fm-zai-sitz`. |
-| Model flag | Never emitted. `claude-zai` is deliberately absent from `model_flag_for_harness` - a `claude-*` slug would be rejected by z.ai. |
-| Effort flag | Never emitted. GLM-5.3 accepts only `low\|high\|max` (a store-level or passed `xhigh` is rejected with API error 400/1210, verified 2026-08-26 on the konto-3 store); the wrapper itself pins `--effort high`, and a caller-side `--effort` after it would win and re-open that failure. `claude-zai` is therefore absent from `effort_flag_for_harness` too. |
+| Launch | The `claude` launch shape with the `claude1 --zai` wrapper in place of the bare `claude` binary, on the konto-1 store, seat resolved via `bin/fm-zai-sitz`. |
+| Model flag | Threads like `claude` (captain 26.08., measured). The wrapper maps the aliases onto plan models: `sonnet`/`haiku` and the subagent default -> `glm-4.7` (Sonnet-class per z.ai's own positioning "aligns with Claude Sonnet"; multiplier 4.6/16 = ~33% cheaper than glm-5.3 at 6.9/24; GLM-5 pulls ahead only on complex multi-step work), `opus`/`fable` -> `glm-5.3[1m]`. The `[1m]` suffix is a CLIENT-side convention (the API rejects the literal slug; Claude Code uses it only to size its own context). `glm-5.2` no longer exists as a served tier (the server answers it AS glm-5.3, echo measured); `glm-5-turbo` hangs on direct probes (2x timeout 26.08.) - use neither. |
+| Effort flag | Threads like `claude`, every tier including `xhigh` (measured 26.08. via CLI flag). The historic 400/1210 came from a store-level settings `effortLevel`, which any CLI flag overrides; the wrapper pins `--effort high` only when the caller passes no effort flag. |
+| Context window | The wrapper sizes `CLAUDE_CODE_MAX_CONTEXT_TOKENS` from the requested model: 1M for the `[1m]` tiers (default/opus/fable), 200k for `sonnet`/`haiku`/plain slugs. |
 | Acceptance evidence | Smoke test (`claude1 --zai -p` answered) plus a captain-mandated coding test 26.08.: GLM-5.3 implemented `merge_intervalle` against a pre-written 7-case unittest file; independent verifier run: `Ran 7 tests ... OK`, exit 0. |
 
 ## codex (VERIFIED 2026-06-11, codex-cli 0.139.0)
