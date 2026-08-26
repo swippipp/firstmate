@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""fm-brett-zusatzflaechen - Rangliste und Captain-Holds fuer die Werkstatt.
+
+Captain-Wort 27.08. (O-0135-Nachtrag): "die rangliste auch ans brett,
+kategorie unter werkstatt live" und "captain holds auch als kategorie,
+sodass ich alle termine sehe".
+
+Schreibt zwei Sidecar-Dateien in data/brett-lieferung/, die der bestehende
+brett-nachschub-rsync unveraendert zum gex traegt (/data/flaechen). Der
+A2-geschuetzte bin/brett-flaechenlauf wird NICHT angefasst - dies ist ein
+eigenstaendiger, rein lesender Erzeuger:
+
+  rangliste.json  aus data/wette/rangliste.tsv (Reihenfolge, Captain-Eigentum
+                  A15; Status-Ableitung folgt mit P9 - keine Pflegespalte)
+  holds.json      alle gehaltenen offenen Posten ALLER Heime aus deren
+                  data/backlog.md, mit hold-kind, hold-until (die Termine!),
+                  seit und Kurzgrund. Ein hold-until in der Vergangenheit
+                  bleibt ein Hold (O-0135h) und wird als 'abgelaufen' markiert.
+
+Atomar geschrieben (tmp+rename); Fehler sind laut (Exit != 0).
+Aufruf: fm-brett-zusatzflaechen [--heim PFAD] [--nach PFAD]
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+HOLD_ZEILE = re.compile(r"^- \[ \] ([A-Za-z0-9_-]+)(.*)$")
+FELD = {
+    "grund": re.compile(r"\(hold: (.*?)\) \(hold-"),
+    "kind": re.compile(r"\(hold-kind: ([a-z-]+)\)"),
+    "until": re.compile(r"\(hold-until: ([0-9-]+)\)"),
+    "seit": re.compile(r"\(since ([0-9-]+)\)"),
+}
+
+
+def heime(heim: Path):
+    """(id, pfad) je lokalem Heim, Hauptheim zuerst - wie fm-autonomie-wecker."""
+    yield "haupt", heim
+    sm = heim / "data" / "secondmates.md"
+    if not sm.is_file():
+        return
+    for zeile in sm.read_text(encoding="utf-8").splitlines():
+        if not zeile.startswith("- ") or "(host:" in zeile or "(home: " not in zeile:
+            continue
+        sm_id = zeile[2:].split()[0]
+        pfad = zeile.split("home: ", 1)[1].split(";")[0].split(")")[0].strip()
+        yield sm_id, Path(pfad)
+
+
+def lies_holds(heim: Path, heute: dt.date) -> list[dict]:
+    posten = []
+    for sm_id, pfad in heime(heim):
+        backlog = pfad / "data" / "backlog.md"
+        if not backlog.is_file():
+            continue
+        for zeile in backlog.read_text(encoding="utf-8", errors="replace").splitlines():
+            if "(hold" not in zeile:
+                continue
+            m = HOLD_ZEILE.match(zeile)
+            if not m:
+                continue
+            rest = m.group(2)
+            felder = {k: (rx.search(rest).group(1) if rx.search(rest) else None)
+                      for k, rx in FELD.items()}
+            abgelaufen = False
+            if felder["until"]:
+                try:
+                    abgelaufen = dt.date.fromisoformat(felder["until"]) <= heute
+                except ValueError:
+                    pass
+            posten.append({
+                "name": m.group(1), "heim": sm_id,
+                "kind": felder["kind"] or "unbenannt",
+                "grund": (felder["grund"] or "").strip()[:180],
+                "until": felder["until"], "seit": felder["seit"],
+                "abgelaufen": abgelaufen,
+            })
+    # captain zuerst; darin Termine (mit until) aufsteigend vor Terminlosen
+    posten.sort(key=lambda p: (p["kind"] != "captain",
+                               p["until"] is None, p["until"] or "", p["name"]))
+    return posten
+
+
+def lies_rangliste(heim: Path) -> list[dict]:
+    tsv = heim / "data" / "wette" / "rangliste.tsv"
+    posten = []
+    for zeile in tsv.read_text(encoding="utf-8").splitlines():
+        if zeile.startswith("#") or not zeile.strip():
+            continue
+        teile = zeile.split("\t")
+        if len(teile) >= 3:
+            posten.append({"rang": int(teile[0]), "paket": teile[1], "heim": teile[2]})
+    return posten
+
+
+def schreibe(pfad: Path, inhalt: dict) -> None:
+    tmp = pfad.with_suffix(".tmp")
+    tmp.write_text(json.dumps(inhalt, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, pfad)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--heim", default=os.path.expanduser("~/firstmate"))
+    ap.add_argument("--nach", default=None)
+    a = ap.parse_args()
+    heim = Path(a.heim)
+    nach = Path(a.nach) if a.nach else heim / "data" / "brett-lieferung"
+    nach.mkdir(parents=True, exist_ok=True)
+    stand = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    heute = dt.date.today()
+
+    try:
+        rangliste = lies_rangliste(heim)
+    except OSError as e:
+        print(f"fm-brett-zusatzflaechen: Rangliste unlesbar: {e}", file=sys.stderr)
+        return 1
+    holds = lies_holds(heim, heute)
+
+    schreibe(nach / "rangliste.json",
+             {"stand": stand, "quelle": "data/wette/rangliste.tsv (O-0135, A15)",
+              "posten": rangliste})
+    schreibe(nach / "holds.json",
+             {"stand": stand, "quelle": "data/backlog.md aller Heime",
+              "posten": holds})
+    print(f"fm-brett-zusatzflaechen: {len(rangliste)} Rangliste-Zeilen, "
+          f"{len(holds)} Holds ({sum(1 for h in holds if h['kind'] == 'captain')} captain, "
+          f"{sum(1 for h in holds if h['abgelaufen'])} abgelaufen) -> {nach}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
