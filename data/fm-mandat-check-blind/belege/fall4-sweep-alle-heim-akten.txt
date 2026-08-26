@@ -1,0 +1,58 @@
+# FALL 4 (flottenweite Pruefung ALLER Heim-Mandat-Akten auf die Kommentar-Falle)
+# Heime: genau EINES gefunden (fd nach fm-send.sh ausserhalb .treehouse): /home/fridjof/firstmate.
+#   ~/.treehouse/* sind Wegwerf-Worktrees (Projekt-Spiegel), keine Heime.
+# Schichten: data/mandat/*.md (Uebergangs-Fallback) = 13 Akten; projects/*/MANDAT.md = 0 Akten
+#   (ls-Befehl unten). Die projekt-eigene Schicht ist also flottenweit noch gar nicht belegt -
+#   es gibt dort nichts zu pruefen.
+$ ls /home/fridjof/firstmate/projects/*/MANDAT.md   => keine Treffer (exit 1)
+
+## 4a) Alle 13 Akten durch den GEHARTETEN Parser (byte-genau extrahiert: sed -n über is_known_klasse/trim/parse_mandat)
+$ sweep-output:
+Bietkompass.md	53
+captain-brett.md	29
+firstmate.md	25
+FreeImage.md	30
+GEX_GATEWAY.md	47
+HPlan.md	46
+LensclashDB.md	38
+lensclash.md	91
+Quiz-Web.md	47
+SnackSuite.md	50
+Strickapp.md	22
+testlab.md	18
+trooper_ai.md	21
+
+## 4b) Sektionsgeometrie je Akte (awk-Klassifikation der Zeilen IM Abschnitt): Kommentar-, ANDERES-Zahl JEDSFALLS 0
+$ tabellarische Ausgabe:
+Bietkompass.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+captain-brett.md	kommentar_im_abschnitt=0	klasszeilen=4	junk=ANDERES=0	leer=0
+firstmate.md	kommentar_im_abschnitt=0	klasszeilen=3	junk=ANDERES=0	leer=0
+FreeImage.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+GEX_GATEWAY.md	kommentar_im_abschnitt=0	klasszeilen=6	junk=ANDERES=0	leer=0
+HPlan.md	kommentar_im_abschnitt=0	klasszeilen=6	junk=ANDERES=0	leer=0
+LensclashDB.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+lensclash.md	kommentar_im_abschnitt=0	klasszeilen=6	junk=ANDERES=0	leer=0
+Quiz-Web.md	kommentar_im_abschnitt=0	klasszeilen=6	junk=ANDERES=0	leer=0
+SnackSuite.md	kommentar_im_abschnitt=0	klasszeilen=6	junk=ANDERES=0	leer=0
+Strickapp.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+testlab.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+trooper_ai.md	kommentar_im_abschnitt=0	klasszeilen=5	junk=ANDERES=0	leer=0
+
+## 4c) Gegenprobe: Klassen-Eintragzahl ALTER Parser (HEAD-Stand) vs GEHARTETER Parser je Akte
+#    alt==neu ueberall => keine Akte verliert heute Eintraege durch die Haertung (kein Bruch);
+#    und mit 4b zusammen: die Falle ist aktuel LIVE nirgends gestellt - sie WARS nur bei SnackSuite
+#    vor dessen Ad-hoc-Reparatur (26.08. 16:51).
+$ join-Tabelle:
+Bietkompass.md   alt= 53 neu= 53 diff=+0
+captain-brett.md alt= 29 neu= 29 diff=+0
+firstmate.md     alt= 25 neu= 25 diff=+0
+FreeImage.md     alt= 30 neu= 30 diff=+0
+GEX_GATEWAY.md   alt= 47 neu= 47 diff=+0
+HPlan.md         alt= 46 neu= 46 diff=+0
+LensclashDB.md   alt= 38 neu= 38 diff=+0
+lensclash.md     alt= 91 neu= 91 diff=+0
+Quiz-Web.md      alt= 47 neu= 47 diff=+0
+SnackSuite.md    alt= 50 neu= 50 diff=+0
+Strickapp.md     alt= 22 neu= 22 diff=+0
+testlab.md       alt= 18 neu= 18 diff=+0
+trooper_ai.md    alt= 21 neu= 21 diff=+0

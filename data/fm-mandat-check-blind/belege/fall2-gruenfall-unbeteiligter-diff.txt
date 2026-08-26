@@ -1,0 +1,8 @@
+# FALL 2 (Gruenfall): derselbe Repo-Stand mit derselben kommentierten Akte (geld-Zeile, Kommentarzeile, sicherheit-Zeile im Abschnitt),
+#       Diff beruehrt NUR src/util.ts, von keinem Muster der Akte getroffen
+
+$ command:
+FM_TOR_LOG_UNTERDRUECKEN=1 FM_HOME=/tmp/mandat-repro.BD5O/home /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/bin/fm-mandat-check.sh repro feature-nebenbei
+
+$ output:
+exit=0  stdout-leer=ja  => Erwartung erfuellt: unbeteiligter Diff passiert frei und leise.

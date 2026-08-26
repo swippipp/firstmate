@@ -1,0 +1,53 @@
+# Suite-Lauf: tests/fm-mandat-check.test.sh (erweiterte Bestandssuite, KEINE neue Datei)
+$ command: bash tests/fm-mandat-check.test.sh
+$ output:
+ok: armed run reports one row per struck Captain-Klasse, exit 3
+ok: armed refusal is loud: names its source and a concrete Ausweg
+ok: armed run on a clean diff is frei: exit 0, silent
+ok: both mandate sources missing: exit 3, 'alles hold: kein Mandat'
+ok: the fallback mandate file is read and used when no project MANDAT.md exists
+ok: erweitern appends the pattern and deposits one dated Rücklauf-Markerdatei
+ok: a diff matching the just-appended pattern now refuses (erweitern took effect)
+ok: flag absent: the exact same captain-class hit passes silently (exit 0) - divergence proven
+ok: flag absent: a missing mandate also passes silently, not just a match
+ok: an unknown class name in a mandate file aborts loudly instead of a silent fallback
+ok: mid-section comments no longer end the section: hits above AND below them hold, the uninvolved diff stays frei
+ok: a typo'd class line inside the section aborts loudly instead of widening the free path
+ok: FM_MANDAT_SWEEP=1 marks every decision row sweep=1 while gate verdicts stay byte-identical
+all mandat-check checks passed
+exit=0
+gelaufen: 13 Tests, exit=0
+
+# Lint-Lauf: bin/fm-lint.sh (kompletter Gate-Lauf im Worktree)
+$ command: bin/fm-lint.sh
+$ output:
+fm-lint.sh: ShellCheck 0.11.0 (pinned 0.11.0)
+fm-lint.sh: full ShellCheck extended analysis enabled
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+fm-lint-workflows.sh: 3 workflow files valid
+AGENTS.md: 45 line(s) (limit 60)
+AGENTS.md: 9 Reader clause(s), 18 named reader file(s) checked for existence and executability
+anchors: HR1 HR4 cited from regeln/, all present as AGENTS.md hard rules
+WARNUNG: fm-regeln/venv/model not available - falling back to a local YAML parse plus the v2 mandatory-field check (Ausweg: run bin/fm-regeln ingest once to bootstrap, then re-run this gate for the full validation)
+regeln: 21 rule(s) read
+caps: core set 6/8, context set 15/40
+FATAL: lessons ledger missing: /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/data/forensik-2026-08/lehren-ledger.md (Ausweg: restore it or point --ledger at it; without it no Lnn anchor can be verified)
+readers: 21 rule reader(s) checked (existence, executability, hook registration, colocated test)
+manifest: 38 row(s), 4 still prose-only (enforcement debt, disclosed, not a breach)
+coverage debt: anchors cited in AGENTS.md/regeln with no manifest row: L05 L06 L08 L14 L17 L27 L42 L44 L47 L49 L50 L51 L52 L53 L54 L60 L67 L68 L70 L72 L73 L75 L78 L79 L81 L86 L87 L90 L92 L93 L95 L96 L97 L98
+coverage debt: 34 (ratchet stand 34, unchanged)
+dead references in .agents/skills/, .claude/skills/, docs/:
+  /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/docs/subagent-guard.md:173:When `bin/fm-scout.sh` exists in the home the message first defers to the `AGENTS.md` intake classification, then routes work already classified as a scout there and authorized ship work with its bounded research to `bin/fm-brief.sh` then `bin/fm-spawn.sh`.
+dead references: 1 (ratchet stand 1, unchanged)
+diff gate: no newly added rule id in regeln/*.yaml
+regel-eval: 1 FATAL finding(s), 1 warning(s) - the rulebook does not pass its own gate
+regel-eval: TOR UNARMED (/home/fridjof/.treehouse/firstmate-139b05/8/firstmate/state/.tor-regel-eval-scharf missing) - findings reported, exit code suppressed (Ausweg: arm with 'touch /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/state/.tor-regel-eval-scharf', or run with --scharf)
+exit=0
+
+# regel-eval-Sonderlauf mit echtem Ledger (der Worktree fehlt der ungetrackte Ledger-Datei beim
+# ersten Lauf; mit --ledger auf den primären Heim-Ledger läuft der gleiche check clean durch):
+$ command: bin/fm-regel-eval.sh check --ledger /home/fridjof/firstmate/data/forensik-2026-08/lehren-ledger.md
+dead references: 1 (ratchet stand 1, unchanged)
+diff gate: no newly added rule id in regeln/*.yaml
+regel-eval: gate passed (1 warning(s))
+gelaufen: 13 Suite-Tests exit=0, lint exit=0, regel-eval(check) exit=0

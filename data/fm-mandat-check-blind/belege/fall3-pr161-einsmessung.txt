@@ -1,0 +1,40 @@
+# FALL 3 (Einsmessung am ECHTEN PR-161-Diff)
+# PR 161 SnackSuite "Gleichnamiger Upload: bytegleiche Datei fragt nicht zurueck", gemergt 26.08.2026 16:53 CEST
+#   (zwei Minuten NACH der Ad-hoc-Reparatur der Akte data/mandat/SnackSuite.md um 16:51).
+# Akte = Reparaturstand vom primären Heim. Sandbox-State (/tmp), Tor-Log unterdrueckt.
+
+$ git -C /home/fridjof/firstmate/projects/SnackSuite diff --name-only PR^1..PR
+AGENTS.md
+doc-chat/public/admin/index.html
+doc-chat/src/admin.ts
+doc-chat/test/adminUploadFeld.test.ts
+doc-chat/test/ingest.test.ts
+
+## 3a) GEHARTETER Parser + Reparaturstand-Akte
+$ command:
+FM_TOR_LOG_UNTERDRUECKEN=1 FM_HOME=/home/fridjof/firstmate FM_STATE_OVERRIDE=/tmp/fm-mandat-state-sandbox /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/bin/fm-mandat-check.sh SnackSuite 'cfded4ac26c9b7628bf8a4c0ad96aa535c993088^1..cfded4ac26c9b7628bf8a4c0ad96aa535c993088'
+$ output:
+nutzerdaten	doc-chat/src/*	doc-chat/src/admin.ts
+nutzerdaten	doc-chat/public/*	doc-chat/public/admin/index.html
+error: MANDAT TOR (repo 'SnackSuite'): Captain-Klasse getroffen (2 Treffer: nutzerdaten ) - siehe Zeilen oben.
+  source: /home/fridjof/firstmate/data/mandat/SnackSuite.md, Abschnitt 'Captain-Klassen' (Plan Entwurf C Punkt 4).
+  Ausweg: get the captain's explicit word for this change, or broaden the boundary yourself via:
+    fm-mandat-check.sh erweitern SnackSuite --klasse <klasse> --muster '<glob>' --grund '<text>'
+  (effective immediately; opens a 14-day Rücklauf-Marker for board review).
+exit=3
+
+## 3b) Kontrolllauf mit dem ALTEREN Parser (committeter Stand HEAD vor der Haertung), dieselbe Akte:
+$ output:
+nutzerdaten	doc-chat/src/*	doc-chat/src/admin.ts
+nutzerdaten	doc-chat/public/*	doc-chat/public/admin/index.html
+error: MANDAT TOR (repo 'SnackSuite'): Captain-Klasse getroffen (2 Treffer: nutzerdaten ) - siehe Zeilen oben.
+  source: /home/fridjof/firstmate/data/mandat/SnackSuite.md, Abschnitt 'Captain-Klassen' (Plan Entwurf C Punkt 4).
+  Ausweg: get the captain's explicit word for this change, or broaden the boundary yourself via:
+    fm-mandat-check.sh erweitern SnackSuite --klasse <klasse> --muster '<glob>' --grund '<text>'
+  (effective immediately; opens a 14-day Rücklauf-Marker for board review).
+exit=3
+
+# Lesart: beide Urteile identisch (2 Treffer, Klasse nutzerdaten, exit 3). Die historische Blindheit
+# entstand an der VOR-Reparatur-Fassung der Akte (Kommentarzeilen mitten im Abschnitt); die heutige
+# reparierte Akte ist unter BEIDEN Parserstaenden dicht. Dass Klassen UNTER Kommentarzeilen wieder
+# halten, beweisen Fall 1 und Suite-Fall 7b.

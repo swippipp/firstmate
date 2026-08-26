@@ -1,0 +1,15 @@
+# FALL 1 (Rotfall): Akte mit Kommentarzeile IM Captain-Klassen-Abschnitt, Treffer auf Klasse UNTER dem Kommentar
+$ FM_HOME=... bin/fm-mandat-check.sh repro feature-hit  # Akte: geld-Zeile, Kommentar, sicherheit-Zeile
+# Toolstand: ARBEITSSTAND mit Haertung (bin/fm-mandat-check.sh, Worktree fm/fm-mandat-check-blind)
+
+$ command:
+FM_TOR_LOG_UNTERDRUECKEN=1 FM_HOME=/tmp/mandat-repro.BD5O/home /home/fridjof/.treehouse/firstmate-139b05/8/firstmate/bin/fm-mandat-check.sh repro feature-hit
+
+$ output:
+sicherheit	auth/*	auth/login.ts
+error: MANDAT TOR (repo 'repro'): Captain-Klasse getroffen (1 Treffer: sicherheit ) - siehe Zeilen oben.
+  source: /tmp/mandat-repro.BD5O/home/projects/repro/MANDAT.md, Abschnitt 'Captain-Klassen' (Plan Entwurf C Punkt 4).
+  Ausweg: get the captain's explicit word for this change, or broaden the boundary yourself via:
+    fm-mandat-check.sh erweitern repro --klasse <klasse> --muster '<glob>' --grund '<text>'
+  (effective immediately; opens a 14-day Rücklauf-Marker for board review).
+exit=3   => Erwartung erfuellt: Treffer nach Kommentarzeile haelt (3), nicht mehr still frei.
