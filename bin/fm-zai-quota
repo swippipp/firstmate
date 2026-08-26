@@ -134,8 +134,39 @@ print("; ".join(werte)[:300] if werte else "unlesbar: keine Zahlen in der Antwor
 while IFS= read -r name; do
   zeile "team-${name##*_}" "$name"
 done < <(sed -n 's/^\(ZAI_TEAM_KEY_[0-9]\+\)=.*/\1/p' "$ENV_FILE" | sort -t_ -k4 -n)
-# Achtung Pack: der Monitor rechnet nach NUTZER+Scope, nicht nach Key - der
-# Pack-Key meldet die Sitz-Quota seines Inhabers (gemessen 26.08.: identisch
-# mit team-2), NICHT das 100M-Pack-Guthaben. Die Zeile sagt das ehrlich dazu.
-grep -q '^ZAI_API_KEY=' "$ENV_FILE" && zeile pack ZAI_API_KEY | sed 's/$/; hinweis=Sitz-Quota des Key-Inhabers, kein Pack-Guthaben/'
+# Pack: der Monitor rechnet nach NUTZER+Scope - quota/limit zeigte fuer den
+# Pack-Key nur die Sitz-Quota seines Inhabers. Das ECHTE Pack-Guthaben liefert
+# /api/biz/tokenAccounts/list/my (Fund 26.08., Konsolen-Bundle billing-Seite):
+# tokenBalance/tokensMagnitude je Ressourcenpaket, Ablaufdatum, suitableModel.
+# ACHTUNG: das 100M-Pack gilt laut Antwort nur fuer glm-5.3-Inferenz.
+pack_zeile() {
+  local key antwort
+  key=$(sed -n 's/^ZAI_API_KEY=//p' "$ENV_FILE" | head -n 1)
+  [ -n "$key" ] || return 0
+  antwort=$("$CURL_BIN" -sS -m 5 -H "Authorization: Bearer $key" -H "Accept-Language: en-US,en" \
+    "https://api.z.ai/api/biz/tokenAccounts/list/my" 2>&1) \
+    || { printf 'pack\tZAI_API_KEY\tunlesbar: %s\n' "$(printf '%s' "$antwort" | head -c 120)"; return 0; }
+  printf '%s' "$antwort" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("pack\tZAI_API_KEY\tunlesbar: keine JSON-Antwort"); raise SystemExit
+rows = d.get("rows") or []
+if d.get("code") != 200 or not rows:
+    print("pack\tZAI_API_KEY\tunlesbar: " + str(d.get("msg", "keine Pakete"))[:120]); raise SystemExit
+staende = []
+for r in rows:
+    if r.get("status") != "EFFECTIVE":
+        continue
+    frei = r.get("availableBalance", 0); ganz = r.get("tokensMagnitude", 0) or 1
+    pct = 100.0 * (ganz - frei) / ganz
+    ablauf = str(r.get("expirationTime", ""))[:10]
+    modell = str(r.get("suitableModel", "?"))
+    staende.append(f"pack_frei={frei}; pack_limit={ganz}; pack_verbraucht_pct={pct:.1f}; "
+                   f"pack_ablauf={ablauf}; pack_modell={modell}")
+print("pack\tZAI_API_KEY\t" + ("; ".join(staende) if staende else "kein wirksames Paket"))
+'
+}
+pack_zeile
 exit 0
