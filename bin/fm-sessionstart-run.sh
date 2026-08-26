@@ -166,4 +166,24 @@ else
   echo 'WRIT_FM: MISSING - Kernregeln nicht geladen (bin/fm-regeln ingest)'
 fi
 
+# Arming census (L99/N1): regeln/TORE is the canonical flag ledger; a home
+# whose state/ misses one runs that gate DISARMED without any refusal ever
+# firing - the LensClash second home landed through unarmed HR2' gates this
+# way. This reader makes the gap loud in EVERY session of the affected home.
+# Fail-open like the rules block: a missing TORE file stays silent (pre-L99
+# checkouts), and the census never blocks session start.
+TORE_LISTE="$SCRIPT_DIR/../regeln/TORE"
+if [ -r "$TORE_LISTE" ]; then
+  FEHLEND=""
+  while IFS= read -r tor; do
+    case "$tor" in ''|'#'*) continue ;; esac
+    [ -f "$STATE/.tor-$tor-scharf" ] || FEHLEND="$FEHLEND $tor"
+  done < "$TORE_LISTE"
+  if [ -n "$FEHLEND" ]; then
+    echo "TOR-WARNUNG (L99): in diesem Heim NICHT scharf:$FEHLEND"
+    echo "  Jede Landung/Aktion laeuft an diesen Toren ungeprueft vorbei."
+    echo "  Ausweg: Flags setzen (state/.tor-<name>-scharf) und den Firstmate melden."
+  fi
+fi
+
 exit 0

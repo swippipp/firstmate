@@ -1,0 +1,17 @@
+# regeln/TORE - the canonical set of arming flags every fleet home must carry.
+# One gate name per line; the flag file is state/.tor-<name>-scharf in EACH home.
+# Reader: bin/fm-sessionstart-run.sh warns LOUD in every session whose home
+# misses one (L99: the LensClash second home ran landings through unarmed
+# HR2' gates because arming lived only in the primary's untracked state/).
+# Adding a line here arms nothing by itself - set the flags in every home in
+# the same change (the flags are per-home state; this file is the ledger the
+# reader compares against).
+abnahme
+arbeit-ohne-auftrag
+begehung
+bemerkung
+git
+kill
+mandat
+order
+reservierung

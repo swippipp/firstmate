@@ -56,3 +56,4 @@ hook	PreToolUse:fm-git-guard.sh	the destruction gate is only law while it is reg
 hook	PreToolUse:fm-kill-pretool-check.sh	the kill gate is only law while it is registered as a hook
 hook	Stop:fm-turnend-guard.sh	turn-end guard closes the turn; unregistered it fails open silently
 golden	tests/regel-retrieval-golden.tsv	golden retrieval suite - the rulebook stays a test-covered artifact
+pfad	regeln/TORE	kanonische Tor-Flag-Liste (L99) - Leser: fm-sessionstart-run.sh Zensus je Heim
