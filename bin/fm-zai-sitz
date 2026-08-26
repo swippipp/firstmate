@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# fm-zai-sitz - the ONE owner of z.ai seat selection for the claude-zai route
+# (order O-0114: Team-Coding-Plan as the main worker route).
+#
+# Usage:
+#   fm-zai-sitz            -> "<sitz>\t<env-name>" on stdout, e.g.
+#                             "team-1\tZAI_TEAM_KEY_1" or "pack\tZAI_API_KEY"
+#   fm-zai-sitz --anzeige  -> human-readable state of every seat (no selection,
+#                             no round-robin advance)
+#
+# Contract:
+#   - Key discovery is BY NAME CONVENTION from the claw env file (the single
+#     key owner): ZAI_TEAM_KEY_<n> = team seats, ZAI_API_KEY = the prepaid
+#     token pack. No second ledger.
+#   - Selection ladder (captain 26.08.): balance the team seats ("beide
+#     aehnlich belasten"); when every team seat stands at its 5h wall, answer
+#     `pack`; no keys at all is a LOUD exit 2, never a guessed seat.
+#   - Balancing source: the coding-plan monitor API
+#     (GET https://api.z.ai/api/monitor/usage/quota/limit, Authorization: <key>
+#     without Bearer). As of 26.08. that endpoint answers "当前用户不存在coding
+#     plan" for the captain's seats even though inference runs - so every
+#     monitor answer that yields no usable number degrades to ROUND-ROBIN over
+#     a flock-guarded state file. The parse is deliberately tolerant: the
+#     success schema is undocumented; we accept the first plausible
+#     remaining-percent field and otherwise say "unlesbar" instead of guessing.
+#   - Every selection appends one JSONL line to the cache dir (tor-log style),
+#     so "beide aehnlich belasten" stays checkable after the fact.
+#
+# Env overrides (tests): FM_ZAI_ENV (key file), FM_ZAI_CACHE (cache/state dir),
+# FM_ZAI_CURL (curl replacement), FM_ZAI_TTL (cache seconds, default 60).
+
+set -u
+
+ENV_FILE="${FM_ZAI_ENV:-$HOME/.config/claw/env}"
+CACHE_DIR="${FM_ZAI_CACHE:-$HOME/.cache/fm-zai}"
+CURL_BIN="${FM_ZAI_CURL:-curl}"
+TTL="${FM_ZAI_TTL:-60}"
+MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit"
+
+mkdir -p "$CACHE_DIR"
+
+die() { printf 'fm-zai-sitz: %s\n' "$*" >&2; exit 2; }
+
+[ -r "$ENV_FILE" ] || die "key file $ENV_FILE is missing or unreadable - the claw env file is the single key owner (ZAI_TEAM_KEY_<n>, ZAI_API_KEY)"
+
+# Discover seats by convention, in numeric order.
+TEAM_SITZE=()
+while IFS= read -r name; do
+  TEAM_SITZE+=("$name")
+done < <(sed -n 's/^\(ZAI_TEAM_KEY_[0-9]\+\)=.*/\1/p' "$ENV_FILE" | sort -t_ -k4 -n)
+PACK_VORHANDEN=0
+grep -q '^ZAI_API_KEY=' "$ENV_FILE" && PACK_VORHANDEN=1
+
+[ "${#TEAM_SITZE[@]}" -gt 0 ] || [ "$PACK_VORHANDEN" -eq 1 ] \
+  || die "no z.ai keys in $ENV_FILE (expected ZAI_TEAM_KEY_<n> and/or ZAI_API_KEY)"
+
+key_fuer() { sed -n "s/^$1=//p" "$ENV_FILE" | head -n 1; }
+
+sitz_name() { # ZAI_TEAM_KEY_3 -> team-3
+  printf 'team-%s' "${1##*_}"
+}
+
+# monitor_rest <env-name>: remaining 5h percent (0-100) or "-" when the
+# answer carries no usable number. Cached TTL seconds per seat.
+monitor_rest() {
+  local name=$1 cache="$CACHE_DIR/monitor-$1.json" now age antwort rest key
+  now=$(date +%s)
+  if [ -f "$cache" ]; then
+    age=$(( now - $(stat -c %Y "$cache" 2>/dev/null || echo 0) ))
+    [ "$age" -lt "$TTL" ] || rm -f "$cache"
+  fi
+  if [ ! -f "$cache" ]; then
+    key=$(key_fuer "$name")
+    [ -n "$key" ] || { printf -- '-'; return 0; }
+    "$CURL_BIN" -sS -m 3 -H "Authorization: $key" -H "Accept-Language: en-US,en" \
+      "$MONITOR_URL" > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" \
+      || { rm -f "$cache.tmp"; printf -- '-'; return 0; }
+  fi
+  antwort=$(cat "$cache" 2>/dev/null) || { printf -- '-'; return 0; }
+  # Tolerant parse: the documented endpoint exists, its success schema does
+  # not (26.08.). Accept the first plausible remaining/percent number; a
+  # "success":false or missing number is "unlesbar", never a guess.
+  rest=$(printf '%s' "$antwort" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("-"); raise SystemExit
+def suche(o):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            lk = k.lower()
+            if isinstance(v, (int, float)) and any(s in lk for s in ("remain", "rest", "left", "available")):
+                return v
+        for v in o.values():
+            r = suche(v)
+            if r is not None:
+                return r
+    if isinstance(o, list):
+        for v in o:
+            r = suche(v)
+            if r is not None:
+                return r
+    return None
+if isinstance(d, dict) and d.get("success") is False:
+    print("-")
+else:
+    r = suche(d)
+    print("-" if r is None else r)
+' 2>/dev/null) || rest='-'
+  printf '%s' "${rest:--}"
+}
+
+log_wahl() { # <sitz> <env-name> <grund>
+  printf '{"ts":"%s","sitz":"%s","key":"%s","grund":"%s"}\n' \
+    "$(date -u +%FT%TZ)" "$1" "$2" "$3" >> "$CACHE_DIR/wahl.jsonl"
+}
+
+if [ "${1:-}" = "--anzeige" ]; then
+  for name in "${TEAM_SITZE[@]}"; do
+    printf '%s (%s): 5h-Rest %s\n' "$(sitz_name "$name")" "$name" "$(monitor_rest "$name")"
+  done
+  [ "$PACK_VORHANDEN" -eq 1 ] && printf 'pack (ZAI_API_KEY): Fallback, Verbrauch nur in der z.ai-Konsole sichtbar\n'
+  exit 0
+fi
+
+# --- selection ---------------------------------------------------------------
+if [ "${#TEAM_SITZE[@]}" -eq 0 ]; then
+  log_wahl pack ZAI_API_KEY "keine Team-Sitze hinterlegt"
+  printf 'pack\tZAI_API_KEY\n'
+  exit 0
+fi
+
+BESTER='' BESTER_REST='' MESSBAR=0
+for name in "${TEAM_SITZE[@]}"; do
+  rest=$(monitor_rest "$name")
+  [ "$rest" = "-" ] && continue
+  MESSBAR=1
+  # exhausted seats (<=0 remaining) drop out of the running
+  vergleich=$(python3 -c "print(1 if float('$rest') > 0 else 0)" 2>/dev/null) || vergleich=0
+  [ "$vergleich" = 1 ] || continue
+  if [ -z "$BESTER" ] || python3 -c "exit(0 if float('$rest') > float('$BESTER_REST') else 1)" 2>/dev/null; then
+    BESTER=$name BESTER_REST=$rest
+  fi
+done
+
+if [ -n "$BESTER" ]; then
+  log_wahl "$(sitz_name "$BESTER")" "$BESTER" "monitor: groesster 5h-Rest $BESTER_REST"
+  printf '%s\t%s\n' "$(sitz_name "$BESTER")" "$BESTER"
+  exit 0
+fi
+
+if [ "$MESSBAR" -eq 1 ]; then
+  # Every team seat measured AND exhausted -> the 5h wall: fall to the pack.
+  if [ "$PACK_VORHANDEN" -eq 1 ]; then
+    log_wahl pack ZAI_API_KEY "alle Team-Sitze an der 5h-Wand"
+    printf 'pack\tZAI_API_KEY\n'
+    exit 0
+  fi
+  die "every team seat is at its 5h wall and no ZAI_API_KEY pack fallback exists"
+fi
+
+# Monitor unusable for every seat -> round-robin, flock-guarded.
+STATE="$CACHE_DIR/round-robin"
+exec 9>"$STATE.lock"
+flock 9
+letzter=$(cat "$STATE" 2>/dev/null || printf '')
+naechster=${TEAM_SITZE[0]}
+if [ -n "$letzter" ]; then
+  for i in "${!TEAM_SITZE[@]}"; do
+    if [ "${TEAM_SITZE[$i]}" = "$letzter" ]; then
+      naechster=${TEAM_SITZE[$(( (i + 1) % ${#TEAM_SITZE[@]} ))]}
+      break
+    fi
+  done
+fi
+printf '%s' "$naechster" > "$STATE"
+log_wahl "$(sitz_name "$naechster")" "$naechster" "round-robin (Monitor unlesbar)"
+printf '%s\t%s\n' "$(sitz_name "$naechster")" "$naechster"

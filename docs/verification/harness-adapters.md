@@ -150,11 +150,13 @@ Verification evidence: `tests/fm-control-relaunch.test.sh`'s `test_relaunch_move
 
 ### claude-zai (VERIFIED as a control-plane adapter value, 2026-08-26)
 
-`claude-zai` is the claude family's GLM-5.3 launch profile: the `claude1 --zai` wrapper routes to z.ai's Anthropic-compatible endpoint (`api.z.ai/api/anthropic`, paid 100M token pack, order O-0112). Same family-variant pattern as `claude-ox`; `fm_control_harness_family` folds it to `claude` via the `claude*` prefix rule, so everything under `claude` above applies unchanged.
+`claude-zai` is the claude family's GLM-5.3 launch profile: the `claude1 --zai` wrapper routes to z.ai's Anthropic-compatible endpoint (`api.z.ai/api/anthropic`; orders O-0112/O-0114). Same family-variant pattern as `claude-ox`; `fm_control_harness_family` folds it to `claude` via the `claude*` prefix rule, so everything under `claude` above applies unchanged.
+
+Since O-0114 the wrapper resolves its own SEAT through `bin/fm-zai-sitz` (single owner of the ladder): the two Team-Coding-Plan premium seats are balanced ("beide aehnlich belasten"), and when both stand at their 5h wall the launch falls to the prepaid 100M token pack (`ZAI_API_KEY`). Keys live by name convention in `~/.config/claw/env` (`ZAI_TEAM_KEY_<n>`, `ZAI_API_KEY`); an explicit wrapper argument (`--zai team-1|team-2|pack`) pins a seat for tests. The wrapper also attaches `--mcp-config ~/.config/claw/zai-mcp.json` so GLM sessions - and ONLY those (captain: not for Ox) - carry the plan's MCP services: `zai-web-search` (webSearchPrime), `zai-web-reader`, and `zai-vision` (`image_analysis`, `ui_diff_check`, `video_analysis`; GLM-5.3 itself is text-only, screenshots run through the vision MCP). `bin/fm-zai-quota` reports every key's monitor state (verified 26.08.: the provider's monitor endpoint still answers "no coding plan" while inference runs - the tool prints that verbatim).
 
 | Fact | Value |
 |---|---|
-| Launch | The `claude` launch shape with the `claude1 --zai` wrapper in place of the bare `claude` binary. The wrapper pins `glm-5.3[1m]` (1M context) on the konto-1 store. |
+| Launch | The `claude` launch shape with the `claude1 --zai` wrapper in place of the bare `claude` binary. The wrapper pins `glm-5.3[1m]` (1M context; Haiku/small-fast alias `glm-5-turbo`) on the konto-1 store and resolves its seat via `bin/fm-zai-sitz`. |
 | Model flag | Never emitted. `claude-zai` is deliberately absent from `model_flag_for_harness` - a `claude-*` slug would be rejected by z.ai. |
 | Effort flag | Never emitted. GLM-5.3 accepts only `low\|high\|max` (a store-level or passed `xhigh` is rejected with API error 400/1210, verified 2026-08-26 on the konto-3 store); the wrapper itself pins `--effort high`, and a caller-side `--effort` after it would win and re-open that failure. `claude-zai` is therefore absent from `effort_flag_for_harness` too. |
 | Acceptance evidence | Smoke test (`claude1 --zai -p` answered) plus a captain-mandated coding test 26.08.: GLM-5.3 implemented `merge_intervalle` against a pre-written 7-case unittest file; independent verifier run: `Ran 7 tests ... OK`, exit 0. |

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# fm-zai-quota - visibility for every z.ai key (Team-Coding-Plan seats + the
+# prepaid token pack), quota-axi-style one line per key. Read by fm-usage-bericht
+# and the Tagesschluss; closes the zai-pack-verbrauchsanzeige blind spot as far
+# as the provider allows.
+#
+# Output (one line per key):
+#   <sitz>  <env-name>  <stand>
+# where <stand> is the monitor API's usable numbers, or the provider's error
+# verbatim (shortened) - an honest "unlesbar: ..." beats an invented zero.
+# Exit 0 always (a reporting tool never blocks a pipeline); exit 2 only when
+# the key file itself is unreadable.
+#
+# Monitor API: GET https://api.z.ai/api/monitor/usage/quota/limit with
+# Authorization: <key> (no Bearer). As of 26.08.2026 it answers "当前用户不存在
+# coding plan" for the captain's seats although inference runs; this tool prints
+# that answer so the day the endpoint starts working is visible in the reports.
+#
+# Env overrides (tests): FM_ZAI_ENV, FM_ZAI_CURL.
+
+set -u
+
+ENV_FILE="${FM_ZAI_ENV:-$HOME/.config/claw/env}"
+CURL_BIN="${FM_ZAI_CURL:-curl}"
+MONITOR_URL="https://api.z.ai/api/monitor/usage/quota/limit"
+
+[ -r "$ENV_FILE" ] || { printf 'fm-zai-quota: key file %s unreadable\n' "$ENV_FILE" >&2; exit 2; }
+
+zeile() { # <sitz> <env-name>
+  local sitz=$1 name=$2 key antwort stand
+  key=$(sed -n "s/^$name=//p" "$ENV_FILE" | head -n 1)
+  if [ -z "$key" ]; then
+    printf '%s\t%s\tkein Key hinterlegt\n' "$sitz" "$name"
+    return 0
+  fi
+  antwort=$("$CURL_BIN" -sS -m 5 -H "Authorization: $key" -H "Accept-Language: en-US,en" "$MONITOR_URL" 2>&1) \
+    || { printf '%s\t%s\tunlesbar: %s\n' "$sitz" "$name" "$(printf '%s' "$antwort" | head -c 120)"; return 0; }
+  stand=$(printf '%s' "$antwort" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("unlesbar: keine JSON-Antwort"); raise SystemExit
+if isinstance(d, dict) and d.get("success") is False:
+    print("unlesbar: " + str(d.get("msg", d))[:120]); raise SystemExit
+def zahlen(o, pfad=""):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield from zahlen(v, f"{pfad}.{k}" if pfad else k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            yield from zahlen(v, f"{pfad}[{i}]")
+    elif isinstance(o, (int, float)):
+        yield f"{pfad}={o}"
+werte = list(zahlen(d))
+print("; ".join(werte)[:300] if werte else "unlesbar: keine Zahlen in der Antwort")
+' 2>/dev/null) || stand='unlesbar: Parser-Fehler'
+  printf '%s\t%s\t%s\n' "$sitz" "$name" "$stand"
+}
+
+while IFS= read -r name; do
+  zeile "team-${name##*_}" "$name"
+done < <(sed -n 's/^\(ZAI_TEAM_KEY_[0-9]\+\)=.*/\1/p' "$ENV_FILE" | sort -t_ -k4 -n)
+grep -q '^ZAI_API_KEY=' "$ENV_FILE" && zeile pack ZAI_API_KEY
+exit 0
