@@ -1,0 +1,17 @@
+# A2-Gruenfall am gesetzten Tor - Repo Bietkompass (Basis 6341a15fd970574c081b1871924e7ed0fe5f83e0)
+
+## Lauf G1: voller Baum inkl. Tor-Payload (ohne Probe)
+Kommando: cd <Klonwurzel /home/fridjof/.treehouse/firstmate-139b05/1/firstmate/data/p5-ap2b-hauptheim-ausbringung/klone/Bietkompass> && bash bin/fm-lint-workflows.sh
+--- ROH ---
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+fm-lint-workflows.sh: 1 workflow files valid
+--- ENDE ROH (tor-exit=0) ---
+
+## Lauf G2: heile Probe einzeln durch dasselbe Tor
+Kommando: cd <Klonwurzel /home/fridjof/.treehouse/firstmate-139b05/1/firstmate/data/p5-ap2b-hauptheim-ausbringung/klone/Bietkompass> && bash bin/fm-lint-workflows.sh .github/workflows/zzz-fleet-probe.yml
+--- ROH ---
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+fm-lint-workflows.sh: 1 workflow files valid
+--- ENDE ROH (tor-exit=0) ---
+erwartung: gruen (heile Fassung passiert); treffer: ja (beide tor-exit==0)
+gelaufen: 2 Tests, exit=0

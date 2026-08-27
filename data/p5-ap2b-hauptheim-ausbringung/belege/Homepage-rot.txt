@@ -1,0 +1,11 @@
+# A1-Rotfall am gesetzten Tor - Repo Homepage (Basis 631ae61d9ce2baa34ed56759c6cecc34f6b4427d)
+Kommando: cd <Klonwurzel /home/fridjof/.treehouse/firstmate-139b05/1/firstmate/data/p5-ap2b-hauptheim-ausbringung/klone/Homepage> && bash bin/fm-lint-workflows.sh   # Baum inkl. gebrochener Probe zzz-fleet-probe.yml
+--- ROH ---
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+.github/workflows/zzz-fleet-probe.yml:9:26: expected scalar node for float value but found sequence node with "!!seq" tag [syntax-check]
+  |
+9 |         timeout-minutes: [7]
+  |                          ^~~
+--- ENDE ROH (tor-exit=1) ---
+erwartung: rot (gebrochene Probe faellt am gesetzten Tor); treffer: ja (tor-exit!=0)
+gelaufen: 1 Tests, exit=0

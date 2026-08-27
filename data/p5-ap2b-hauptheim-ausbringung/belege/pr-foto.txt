@@ -1,0 +1,23 @@
+# Fern-CI-Foto der 7 offenen PRs (Snapshot nach PR-Erstellung)
+aufgenommen: 2026-08-27T05:35:28Z
+api_response:
+  body: captain-brett #11 state=open merged=false head=fm/workflow-lint-tor base=main
+  truncated: false
+api_response:
+  body: Bietkompass #4 state=open merged=false head=fm/workflow-lint-tor base=main
+  truncated: false
+api_response:
+  body: Homepage #3 state=open merged=false head=fm/workflow-lint-tor base=main
+  truncated: false
+api_response:
+  body: Lernplattform #3 state=open merged=false head=fm/workflow-lint-tor base=main
+  truncated: false
+api_response:
+  body: rag-digital #3 state=open merged=false head=fm/workflow-lint-tor base=master
+  truncated: false
+api_response:
+  body: trooper_ai #4 state=open merged=false head=fm/workflow-lint-tor base=master
+  truncated: false
+api_response:
+  body: wimmel #3 state=open merged=false head=fm/workflow-lint-tor base=main
+  truncated: false
