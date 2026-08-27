@@ -67,10 +67,14 @@ Homepage, Lernplattform, rag-digital, wimmel: bekommen haben sie **nur das Tor**
 
 ## Maschinenlesbare Abnahme
 
-- [A1] erfuellt — je Ziel-Repo fällt die absichtlich gebrochene Probe am gesetzten Tor ROT; Rohausgabe je Repo in `belege/<repo>-rot.txt` (tor-exit=1, actionlint `[syntax-check]`), 7/7.
-- [A2] erfuellt — die heile Fassung passiert GRUEN; Rohausgaben je Repo in `belege/<repo>-gruen.txt` (G1 voller Baum tor-exit=0, G2 heile Probe einzeln tor-exit=0), 7/7.
-- [A3] erfuellt — EIN kleiner PR je Repo über den normalen Lieferweg (Tabelle oben, URLs klickbar); Mandats-Trefferlage je Zeile ausgewiesen (keine MANDAT.md in den 7, Halt über HR2'-Sicherheitsklasse); **nichts gemergt**: `belege/pr-foto.txt` misst state=open, merged=false für alle 7.
-- [A4] erfuellt — Torstand-Tabelle oben auf Nachher fortgeschrieben (7 gesetzte Tore als offene PRs + testlab merged als bestätigt + HPlan/Schwester-Bestand als unverändert).
+A1: erfuellt - captain-brett-rot.txt
+    gilt je für alle 7 Ziel-Repos: die absichtlich gebrochene Probe fällt am gesetzten Tor ROT (tor-exit=1, actionlint syntax-check); die Rohausgabe jedes Repos liegt als `belege/<repo>-rot.txt` nebendatei im Ordner `belege/`.
+A2: erfuellt - captain-brett-gruen.txt
+    gilt je für alle 7: Lauf G1 voller Baum inkl. Tor-Payload und Lauf G2 heile Probe einzeln laufen GRUEN (tor-exit=0); Rohausgabe je Repo als `belege/<repo>-gruen.txt`; die Pflichtzeile `gelaufen` trägt jede Datei.
+A3: erfuellt - pr-foto.txt
+    EIN kleiner PR je Repo über den normalen Lieferweg: captain-brett #11, Bietkompass #4, Homepage #3, Lernplattform #3, rag-digital #3, trooper_ai #4, wimmel #3 (Tabelle oben, URLs klickbar); Mandats-Trefferlage je Zeile ausgewiesen (keine MANDAT.md in den 7, Halt über HR2'-Sicherheitsklasse); pr-foto.txt misst state=open, merged=false für alle 7 - nichts gemergt.
+A4: erfuellt - pr-foto.txt
+    Torstand-Tabelle oben auf Nachher fortgeschrieben: 7 gesetzte Tore als offene PRs (Zustand in pr-foto.txt fotografiert), testlab als gelandet bestätigt (PR 9 merged, API-Nachweis im Report), HPlan und Schwester-Bestand unverändert.
 
 ## Was schiefging / was offen ist / was ich nicht weiß
 
