@@ -1,0 +1,33 @@
+--- a/data/p5-ap2a-workflow-tor-scout/report.md
++++ b/data/p5-ap2a-workflow-tor-scout/report.md
+@@ -150,3 +150,30 @@
+ 2. **FreeImage** in AP2b derzeit ohne Nutzen (keine Workflows): entweder explizit aus der Zielliste streichen oder als „Tor wandert mit, sobald die erste Workflow-Datei kommt" kennzeichnen — Erfindungswürde vermeiden.
+ 3. **Fleet-Vorlage steht fertig im Heim**: `bin/fm-lint-workflows.sh` ist repo-neutral gebaut (`--root`-Option!) und braucht nur die Pinnung `1.7.12` samt Installationsweg (`bin/fm-install-actionlint.sh`) je Zielrepo — exakt das Muster, das HPlans CI (pruefungen.yml Z.127-135) bereits praktiziert.
+ 4. **SnackSuite-Punktleser bei AP2b nicht als „Tor doppelnd" einstufen**: er bleibt wertvoll (Verdrahtungssicherung), ergänzt aber kein YAML-Gate; ein fleet-gesetztes actionlint-Tor beschneidet ihn nicht.
++
++---
++
++## Nachher-Stand (AP2b-Nachzug, fortgeschrieben 27.08., Paket P5/O-0123)
++
++Der AP2b-Nachzug hat das gesetzte Fleet-Tor (Vorlage `bin/fm-lint-workflows.sh` aus diesem Heim, actionlint 1.7.12 gepinnt) in alle 14 Repos mit Workflow-Dateien und ohne Tor gesetzt: je Repo die beiden Tor-Skripte in `bin/`, der CI-Job `arbeitsablauf-gatter` AN der vorhandenen Kette (keine neue Pipeline), bei gex-Konvention zusätzlich `.github/actionlint.yaml`. HPlan blieb unangetastet (Referenz-Tor im Bestand), captain-brett läuft gegen den Fern-Stand `689042a` (AP3-Prüfkette). Patches und Rot-/Grünbelege: `data/p5-ap2b-workflow-lint-tor/` (patches/<repo>.patch, belege/<repo>-{rot,gruen}.txt).
++
++| # | Repo | Vorher (Tabelle oben) | Nachher |
++|---|---|---|---|
++| 1 | lensclash | kein Tor | **TOR GESETZT** (gex) — patch: lensclash.patch |
++| 2 | SnackSuite | kein Tor; Punktleser | **TOR GESETZT** (gex); Punktleser bleibt wertvoll, unverändert |
++| 3 | HPlan | TOR VORHANDEN | **unverändert** — kein zweites Tor (Anti-Ziel) |
++| 4 | Strickapp | kein Tor | **TOR GESETZT** (gex) |
++| 5 | captain-brett | n/a / Stellungsdatei | **TOR GESETZT** am Fern-Stand 689042a (ubuntu); .no-mistakes.yaml-Thema bleibt AP3 |
++| 6 | Quiz-Web | kein Tor | **TOR GESETZT** (gex) |
++| 7 | LensclashDB | kein Tor | **TOR GESETZT** (gex) |
++| 8 | GEX_GATEWAY | kein Tor | **TOR GESETZT** (gex) |
++| 9 | FreeImage | n/a | **unverändert** — keine Workflows; Tor wandert mit der ersten Workflow-Datei (Empfehlung oben befolgt) |
++| 10 | testlab | kein Tor | **TOR GESETZT** (gex) |
++| 11 | trooper_ai | kein Tor | **TOR GESETZT** (ubuntu) |
++| 12 | wimmel | kein Tor | **TOR GESETZT** (ubuntu) |
++| 13 | Homepage | kein Tor | **TOR GESETZT** (ubuntu) |
++| 14 | Bietkompass | kein Tor | **TOR GESETZT** (ubuntu) |
++| 15 | Lernplattform | kein Tor | **TOR GESETZT** (ubuntu) |
++| 16 | rag-digital | kein Tor | **TOR GESETZT** (ubuntu) |
++
++**Summe nachher:** 15 von 15 Repos mit Workflow-Dateien tragen das Tor (HPlan Bestand + 14 gesetzt); FreeImage bleibt sinnvoll außen vor. Belegart je Zeile: absichtlich gebrochene Probe fällt am gesetzten Tor ROT, heile Fassung passiert GRUEN (`data/p5-ap2b-workflow-lint-tor/belege/`, gemessen 27.08.).

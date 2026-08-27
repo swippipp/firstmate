@@ -1,0 +1,17 @@
+# A2-Gruenfall am gesetzten Tor - Repo SnackSuite (Basis 762e272d345e8c575a8d29188398a5ec0352b24e)
+
+## Lauf G1: voller Baum inkl. Tor-Payload und heiler Probe
+Kommando: cd <Klonwurzel /home/fridjof/.treehouse/firstmate-139b05/1/firstmate/data/p5-ap2b-workflow-lint-tor/kopien/SnackSuite> && bash bin/fm-lint-workflows.sh
+--- ROH ---
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+fm-lint-workflows.sh: 2 workflow files valid
+--- ENDE ROH (tor-exit=0) ---
+
+## Lauf G2: heile Probe einzeln durch dasselbe Tor
+Kommando: cd <Klonwurzel /home/fridjof/.treehouse/firstmate-139b05/1/firstmate/data/p5-ap2b-workflow-lint-tor/kopien/SnackSuite> && bash bin/fm-lint-workflows.sh .github/workflows/zzz-fleet-probe.yml
+--- ROH ---
+fm-lint-workflows.sh: actionlint 1.7.12 (pinned 1.7.12)
+fm-lint-workflows.sh: 1 workflow files valid
+--- ENDE ROH (tor-exit=0) ---
+erwartung: gruen (heile Fassung passiert); treffer: ja (beide tor-exit==0)
+gelaufen: 2 Tests, exit=0
